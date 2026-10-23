@@ -6,6 +6,7 @@ Rules live in [SPEC.md](SPEC.md); this file is the contract that contract tests 
 | Binary | Runs | Talks to |
 |---|---|---|
 | `klag` | in a sandbox (agent) | the daemon at `KLAG_URL` (host loopback) through the sandbox proxy |
+| `klag setup` | on the host | the OS (`sudo`), `tailscale`, the tailnet issuer, STS |
 | `klag serve` | on the host | loopback HTTP, the operator socket, the tailnet issuer, AWS |
 | `klag op …` | on the host, outside sandboxes | the operator socket (group `klag-op`) |
 
@@ -30,6 +31,22 @@ HTTP/JSON on host loopback, one object per request. The agent sends `auth`, a pl
 
 A request carrying `project` or `env` returns `INVALID` (exit 1) and is audited as an anomaly. An unreplaced placeholder or unknown token returns `DENIED` and is audited with `decision: alert`.
 
+## Setup
+`klag setup [--yes] [--dry-run] [--project P] [--region R] [--role-arn ARN] [--issuer-url URL] [--tag TAG] [--skip-system]`
+
+Idempotent; run as the operator. It calls `sudo` only for the system step and prints each command first. `--dry-run` prints every step and writes nothing; `--yes` accepts the defaults and fails instead of asking. Exit codes: `0` ok, `1` usage, `6` preflight or doctor failed.
+
+| Step | Does | Asks |
+|---|---|---|
+| preflight | checks OS, Node, `tailscale`, the sandbox runtime; stops with the list of what is missing | nothing |
+| system | user `klag`, group `klag-op`, directories, operator socket, service unit | the `sudo` password, to the OS |
+| tailnet | prints the ACL snippet for the tag, then runs `tailscale up --advertise-tags=<tag>`; Tailscale shows its own login URL | nothing (the tailnet admin creates the tag first) |
+| issuer | finds the issuer, requests a JWT, reads `sub` and `aud` | the URL, only if not found |
+| aws | writes `klag-aws.yaml`, a CloudFormation template filled with issuer, `aud`, `sub`, project and env, for the administrator to upload in the AWS console | the role ARN from the stack outputs, then tests STS |
+| config | writes the config with the defaults below and runs `klag op doctor` | nothing |
+
+Defaults, used without asking: tag `tag:klag-daemon`; issuer `https://idp.<tailnet>.ts.net` (the `tsidp` default hostname); `audience` `sts.amazonaws.com`; env `dev`; `listen` `127.0.0.1:7777`; `operatorSocket` `/run/klag/op.sock`; `audit.path` `/var/lib/klag/audit.jsonl`; `policy.get` `value`; `rateLimit` 60 per minute, burst 10; KMS alias `alias/{project}-dev`. Only the **region**, the **project name** (default: the current directory name) and the **pasted role ARN** are asked. Setup never asks for or stores a credential.
+
 ## Operator CLI
 | Command | Input | Output |
 |---|---|---|
@@ -43,7 +60,7 @@ A request carrying `project` or `env` returns `INVALID` (exit 1) and is audited 
 
 ## Environment and configuration
 - Agent side: `KLAG_URL`. The variable that carries the `auth` placeholder depends on the sandbox runtime (to validate).
-- Daemon side: `KLAG_CONFIG` (default `~/.config/klag/config.json`). No AWS or Tailscale variable and no secret: the file has `awsRegion`; `auth` `{issuerUrl, audience}`; `projects[]` of `{project, env, roleArn, kmsKeyAlias}`; `listen` (loopback only); `operatorSocket`; `policy.get` (`value` or `deny`); `rateLimit` `{perMinute, burst}`; `audit.path`. The registry (hashes) lives in the `klag` user's state, not in this file.
+- Daemon side: `KLAG_CONFIG` (default `/etc/klag/config.json`, root-owned and readable by the `klag` user). No AWS or Tailscale variable and no secret: the file has `awsRegion`; `auth` `{issuerUrl, audience}`; `projects[]` of `{project, env, roleArn, kmsKeyAlias}`; `listen` (loopback only); `operatorSocket`; `policy.get` (`value` or `deny`); `rateLimit` `{perMinute, burst}`; `audit.path`. The registry (hashes) lives in the `klag` user's state, not in this file.
 - The tailnet node (`tailscaled`, tag) is host setup, not klag configuration.
 
 ## Daemon → outside
