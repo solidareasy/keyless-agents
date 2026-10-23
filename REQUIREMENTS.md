@@ -1,11 +1,11 @@
 # klag requirements
 
-Design lives in [SPEC.md](SPEC.md); section numbers (§) point there. Each requirement has one ID, one test level and no duplicate in another section.
+Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INTERFACES.md](INTERFACES.md). Each requirement has one ID, one test level and no duplicate in another section.
 
 ## Premises
 - **P1** Agents are untrusted and may be prompt-injected.
 - **P2** Dev and prod live in separate AWS accounts.
-- **P3** The sandbox runtime gives each sandbox its own channel to the host (to validate, SPEC §10).
+- **P3** The sandbox runtime gives each sandbox its own channel to the host, and one sandbox serves one project-env with many worktrees (to validate, SPEC §10).
 - **P4** Machines authenticate to AWS with OIDC web identity or a local profile; CI uses GitHub OIDC. No static keys.
 - **P5** Dev secrets are burnable: scoped, revocable, rotated after any suspected leak.
 - **P6** The owner accepts that agents see dev values (`get: value`). Prod is never visible to agents.
@@ -15,11 +15,11 @@ Design lives in [SPEC.md](SPEC.md); section numbers (§) point there. Each requi
 | ID | Requirement | SPEC | Test level |
 |---|---|---|---|
 | M1 | Keyspace comes from the registry; `project`/`env` in a payload are ignored and logged | §4 | unit, property |
-| M2 | Sandbox A cannot read or write sandbox B's namespace or another project | §4,§5 | integration (two sandboxes) |
+| M2 | Project-env A cannot read or write project-env B; an agent value never shadows a shared value | §4,§5 | integration (two sandboxes), unit |
 | M3 | Prod is unreachable from dev: separate account, explicit Deny, `--env prod` equals "not found" | §5,§6 | IAM policy simulator, e2e |
 | M4 | `list` returns names only | §5 | unit, canary |
 | M5 | `get` returns the value only when the policy allows; otherwise deny | §5 | unit |
-| M6 | `set` writes only under `/p/dev/agent/<sandboxId>/*`, as `SecureString`, value from stdin or prompt, no delete | §5,§6 | unit, IAM simulator |
+| M6 | `set` writes only under `/p/dev/agent/*` or `/p/dev/agent/tasks/<taskId>/*`, as `SecureString`, value from stdin or prompt, no delete | §5,§6 | unit, IAM simulator |
 | M7 | No value in argv, logs, errors, stack traces, process title or audit | §8 | canary secret test |
 | M8 | Name normalization: reject `..`, `/`, `*`, empty, oversized, unexpected characters | §4 | property/fuzz |
 | M9 | Audit log is hash-chained, daemon-owned 0600, never contains values | §7 | unit, tamper test |
@@ -29,6 +29,7 @@ Design lives in [SPEC.md](SPEC.md); section numbers (§) point there. Each requi
 | M13 | Daemon unprivileged, socket 0600, no core dumps | §8 | integration |
 | M14 | Release via npm trusted publishing with provenance; lockfile, exact deps, SHA-pinned Actions | §9 | CI check |
 | M15 | Written threat model and a dev-leak runbook | §2 | review |
+| M16 | CLI, channel and config follow INTERFACES.md: exit codes, JSON shapes, error codes | INTERFACES | contract tests |
 
 ## Good to have
 - **G1** `inject`: value reaches the process or the sandbox network proxy without reaching the agent.
@@ -38,6 +39,8 @@ Design lives in [SPEC.md](SPEC.md); section numbers (§) point there. Each requi
 - **G5** Egress allowlist helper for supported sandbox runtimes.
 - **G6** Mutation testing on the policy engine.
 - **G7** Secrets Manager adapter (rotation).
+- **G8** `klag op gc` and automatic expiry of task-scope parameters (SSM advanced-tier expiration policies, to validate).
+- **G9** `isolate: task` per-worktree sandboxes.
 
 ## Test strategy
 | Level | Covers | Tooling |

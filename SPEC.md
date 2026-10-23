@@ -1,7 +1,7 @@
 # klag specification (v2, implementable draft)
 
 Package `klag` (npm), command `klag`, repository `keyless-agents`, TypeScript, MIT.
-Requirements, tests and quality gates live in [REQUIREMENTS.md](REQUIREMENTS.md); this file only describes the design.
+Requirements, tests and quality gates live in [REQUIREMENTS.md](REQUIREMENTS.md); inputs and outputs in [INTERFACES.md](INTERFACES.md); this file only describes the design.
 
 ## 1. Goal
 Let coding agents use project credentials with no static cloud keys on machines, in git or in CI, and without trusting an agent with more than one project-env keyspace.
@@ -23,7 +23,7 @@ flowchart LR
     L[("audit log<br/>hash-chained")]
     R["registry<br/>channel → project, env, sandboxId"]
   end
-  subgraph SB["Sandbox (one per project-env)"]
+  subgraph SB["Sandbox (one per project-env, hosts N worktrees)"]
     AG["agent + klag CLI"]
   end
   OP["operator CLI<br/>(outside sandboxes)"]
@@ -57,17 +57,21 @@ sequenceDiagram
 - The keyspace is always derived from the registry. Any `project` or `env` in a request payload is ignored and logged as an anomaly.
 - Fallback when a runtime cannot give a per-sandbox channel: random token (≥128 bits) stored only as a hash, bound to the sandbox id, TTL ≤15 min with renewal, revoked when the sandbox is destroyed.
 - The operator uses a separate channel unreachable from any sandbox.
+- `taskId`, sent by the agent, is advisory: it labels audit lines and the task scope for cleanup and never grants anything.
+
+### 4.1 Sandbox granularity
+The security boundary is the keyspace, and all worktrees of a project-env share it, so **one sandbox serves one project-env and many worktrees**. Agents on different worktrees of the same project-env have the same trust and read the same shared values, so splitting them adds no secret isolation and only multiplies parameters and memory. Per-worktree sandboxes stay available (`isolate: task`) for untrusted code or risky tasks; they then get their own channel and task scope but still the same keyspace.
 
 ## 5. Keyspaces and operations
 | Operation | Agent in dev | Operator | Prod |
 |---|---|---|---|
 | `list` | names under `/p/dev/` (values stripped) | all | agent: `not found` |
 | `get` | `value` (policy `deny` available) | allowed | agent: `not found` |
-| `set` | only `/p/dev/agent/<sandboxId>/*` | any dev path | agent: `not found` |
+| `set` | `/p/dev/agent/*` (project scope) or `/p/dev/agent/tasks/<taskId>/*` (task scope) | any dev path | agent: `not found` |
 | `promote` | no | copies an agent value into `/p/dev/*` | no |
 | `delete`, `revoke` | no | yes | no |
 
-`--env prod` answers exactly like a missing keyspace. Shared paths across projects do not exist; cross-project access needs an explicit operator grant.
+`get NAME` resolves shared (`/p/dev/*`) first, then task scope, then project scope, so an agent value never shadows a shared one. `gc` removes a task scope when its task closes. `--env prod` answers exactly like a missing keyspace. Shared paths across projects do not exist; cross-project access needs an explicit operator grant.
 
 ## 6. AWS layout (created by the CDK construct)
 - **Accounts**: dev and prod in separate AWS accounts. The dev role has no trust or action toward prod.
@@ -78,7 +82,7 @@ sequenceDiagram
 - Machine setup (sandbox runtime, network identity, AWS profile) is done with Ansible. CDK and Ansible hold names and paths only, never values.
 
 ## 7. Audit, limits and revocation
-- Audit log: JSONL, append-only, each line carries the hash of the previous one, file owned by the daemon user (0600). Fields: timestamp, sandboxId, operation, name, version, decision. Never values. CloudTrail is the independent second record.
+- Audit log: JSONL, append-only, each line carries the hash of the previous one, file owned by the daemon user (0600). Fields: timestamp, sandboxId, taskId (advisory), operation, name, version, decision. Never values. CloudTrail is the independent second record.
 - Rate limit per sandbox with burst; a `list` sweep followed by `get` of every name raises an alert.
 - `klag revoke <sandboxId>` kills the channel or token immediately.
 
@@ -91,6 +95,7 @@ sequenceDiagram
 Publish with npm trusted publishing (GitHub OIDC, no npm token) and provenance. Lockfile committed, exact dependency versions, minimal runtime dependencies, GitHub Actions pinned by commit SHA, 2FA for maintainers, secret scanning in CI.
 
 ## 10. To validate before coding
+- Whether one sandbox can serve several Orca worktrees (mount their parent directory) and how the orchestrator starts agents inside it.
 - Which sandbox runtime exposes a per-sandbox channel (socket or vsock) to the guest, and how the daemon learns the sandbox id.
 - IAM condition keys to force `SecureString` on `PutParameter` and the exact behavior of session policies with web identity.
 - Linux support level of the chosen sandbox runtime on non-Ubuntu distributions (best effort until tested).
