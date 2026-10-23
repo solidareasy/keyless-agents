@@ -1,12 +1,12 @@
 # klag interfaces (inputs and outputs)
 
-Rules and rationale live in [SPEC.md](SPEC.md); this file is the contract that contract tests check.
+Rules live in [SPEC.md](SPEC.md); this file is the contract that contract tests check.
 
 ## Binaries
 | Binary | Runs | Talks to |
 |---|---|---|
-| `klag` | inside a sandbox (agent) | the daemon URL (`KLAG_URL`, host loopback) through the sandbox proxy |
-| `klag serve` | on the host | loopback HTTP, the operator socket, AWS |
+| `klag` | in a sandbox (agent) | the daemon at `KLAG_URL` (host loopback) through the sandbox proxy |
+| `klag serve` | on the host | loopback HTTP, the operator socket, the tailnet issuer, AWS |
 | `klag op …` | on the host, outside sandboxes | the operator socket (group `klag-op`) |
 
 ## Agent CLI
@@ -15,43 +15,45 @@ Rules and rationale live in [SPEC.md](SPEC.md); this file is the contract that c
 | Command | Input | stdout | Exit codes |
 |---|---|---|---|
 | `klag list [--prefix P]` | optional prefix | one name per line, or `{"names":[{"name","scope"}]}` | 0, 3, 4, 5 |
-| `klag get NAME [--scope auto\|task\|project]` | name | the raw value, or `{"name","value","version","scope"}` | 0, 1, 2, 3, 4, 5 |
-| `klag set NAME [--scope project\|task]` | name; value from stdin or a no-echo prompt | nothing, or `{"name","version","scope"}` | 0, 1, 3, 4, 5 |
-| `klag doctor` | none | JSON list of checks `{id, ok, detail}`: daemon reachable, placeholder replaced, version | 0, 6 |
+| `klag get NAME` | name | the raw value, or `{"name","value","version","scope"}` | 0, 1, 2, 3, 4, 5 |
+| `klag set NAME` | name; value from stdin or a no-echo prompt | nothing, or `{"name","version","scope"}` | 0, 1, 3, 4, 5 |
+| `klag doctor` | none | checks `{id, ok, detail}`: daemon reachable, placeholder replaced | 0, 6 |
 
-Exit codes: `0` ok, `1` usage or invalid name, `2` not found, `3` denied, `4` rate limited, `5` daemon or AWS unavailable, `6` doctor check failed. stderr carries a human message and never a value. `get --scope auto` resolves shared, then task, then project (SPEC §5). Optional `KLAG_TASK_ID` is sent as an advisory label.
+`scope` is `shared` or `agent`; `get` resolves shared first. Exit codes: `0` ok, `1` usage or invalid name, `2` not found, `3` denied, `4` rate limited, `5` daemon or AWS unavailable, `6` doctor failed. stderr carries a human message, never a value.
 
 ## Protocol (agent ↔ daemon)
-HTTP/JSON on host loopback, one object per request, UTF-8. The agent sends `auth`, a placeholder that the sandbox proxy replaces with the per-instance token, in the body or a header, never in the query string.
+HTTP/JSON on host loopback, one object per request. The agent sends `auth`, a placeholder that the sandbox proxy replaces with the per-instance token (body or header, never the query string).
 
-Request: `{"v":1,"auth":"<placeholder>","op":"list|get|set","name":"…","scope":"auto|task|project","taskId":"…","value":"…"}` (`value` only for `set`).
-Response ok: `{"v":1,"ok":true,"names":[…]}` or `{"v":1,"ok":true,"value":"…","version":3,"scope":"project"}`.
-Response error: `{"v":1,"ok":false,"code":"INVALID|NOT_FOUND|DENIED|RATE_LIMITED|UNAVAILABLE"}`.
-A request carrying `project` or `env` returns `INVALID` (exit 1) and is audited as an anomaly. An unreplaced placeholder or an unknown token returns `DENIED` and is audited with `decision: alert`.
+- Request: `{"v":1,"auth":"<placeholder>","op":"list|get|set","name":"…","value":"…"}` (`value` only for `set`).
+- Response ok: `{"v":1,"ok":true,"names":[…]}` or `{"v":1,"ok":true,"value":"…","version":3,"scope":"agent"}`.
+- Response error: `{"v":1,"ok":false,"code":"INVALID|NOT_FOUND|DENIED|RATE_LIMITED|UNAVAILABLE"}`.
+
+A request carrying `project` or `env` returns `INVALID` (exit 1) and is audited as an anomaly. An unreplaced placeholder or unknown token returns `DENIED` and is audited with `decision: alert`.
 
 ## Operator CLI
 | Command | Input | Output |
 |---|---|---|
-| `klag op list\|get\|set <project> <env> NAME` | project, env, name (value for set from stdin) | as the agent CLI |
-| `klag op promote <project> NAME` | agent value to promote | new shared name and version |
-| `klag op delete <project> <env> NAME` | name | confirmation |
-| `klag op sandbox add <sandboxId> <project> <env>` | ids | the per-instance token, printed once (pipe it into the runtime secret store); only its hash is stored |
+| `klag op list\|get\|set <project> <env> NAME` | value for `set` from stdin | as the agent CLI |
+| `klag op sandbox add <sandboxId> <project> <env>` | ids | the token, printed once (pipe it into the runtime secret store); only its hash is stored |
 | `klag op revoke <sandboxId>` | sandbox id | confirmation; the next request is denied |
-| `klag op doctor <project>` | project | JSON checks: policy shape, prod unreachable |
-| `klag op gc <project> <taskId>` | task id | number of task-scope parameters removed |
+| `klag op promote <project> NAME` | agent value to promote | shared name and version |
+| `klag op delete <project> <env> NAME` | name | confirmation |
+| `klag op doctor <project>` | project | checks: policy shape, prod unreachable, issuer reachable, STS exchange works |
 | `klag op audit verify` | none | `ok`, or the first broken line number |
 
-## Daemon configuration
-JSON file at `KLAG_CONFIG` (default `~/.config/klag/config.json`). It holds no secrets.
-`awsRegion`; `auth` `{type: "profile"|"webIdentity", profile or tokenFile (a path)}`; `projects[]` with `{project, env, roleArn, kmsKeyAlias}`; `listen` (loopback only); `operatorSocket`; `policy.get` (`value` or `deny`); `rateLimit` `{perMinute, burst}`; `audit.path`. The sandbox registry (hashes) lives in the `klag` user's state, not in this file.
+## Environment and configuration
+- Agent side: `KLAG_URL`. The variable that carries the `auth` placeholder depends on the sandbox runtime (to validate).
+- Daemon side: `KLAG_CONFIG` (default `~/.config/klag/config.json`). No AWS or Tailscale variable and no secret: the file has `awsRegion`; `auth` `{issuerUrl, audience}`; `projects[]` of `{project, env, roleArn, kmsKeyAlias}`; `listen` (loopback only); `operatorSocket`; `policy.get` (`value` or `deny`); `rateLimit` `{perMinute, burst}`; `audit.path`. The registry (hashes) lives in the `klag` user's state, not in this file.
+- The tailnet node (`tailscaled`, tag) is host setup, not klag configuration.
 
-## Daemon → AWS
-| Operation | Call | Notes |
-|---|---|---|
-| list | `ssm:GetParametersByPath` (no decryption) | values never decrypted for `list` (to validate) |
-| get | `ssm:GetParameter` with decryption | version returned to the caller |
-| set | `ssm:PutParameter` `Type=SecureString`, project key | path forced to `/{project}/dev/agent/…` |
-| auth | STS `AssumeRoleWithWebIdentity` (tailnet issuer, or GitHub OIDC in CI); `AssumeRole` only in the profile fallback; always with a session policy | role from the project entry |
+## Daemon → outside
+| Operation | Call |
+|---|---|
+| identity | HTTP request to the tailnet issuer for a JWT (`sub` = daemon node) |
+| auth | STS `AssumeRoleWithWebIdentity` with a session policy |
+| list | `ssm:GetParametersByPath` without decryption (to validate) |
+| get | `ssm:GetParameter` with decryption; version returned |
+| set | `ssm:PutParameter` `Type=SecureString`, project key, path forced to `/{project}/dev/agent/…` |
 
 ## Files written
-Audit log, JSONL: `{ts, sandboxId, taskId, op, name, version, decision, prevHash, hash}`. `decision` is `allow`, `deny` or `alert`. The daemon writes no file that contains a value.
+Audit log (JSONL): `{ts, sandboxId, op, name, version, decision, prevHash, hash}` with `decision` `allow`, `deny` or `alert`. The daemon writes no file with a value.
