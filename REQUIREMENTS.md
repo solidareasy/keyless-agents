@@ -25,7 +25,7 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 | M7 | No value in argv, logs, errors, stack traces, process title or audit | §8 | canary secret test |
 | M8 | Name normalization: reject `..`, `/`, `*`, empty, oversized, unexpected characters; `aws*` and `ssm*` reserved | §5 | property/fuzz |
 | M9 | Audit log hash-chained, daemon-owned 0600, never contains values | §7 | unit, tamper test |
-| M10 | Rate limit per sandbox; `revoke` denies the next request | §7 | integration |
+| M10 | Rate limit per sandbox; `op sandbox revoke` denies the next request | §7 | integration |
 | M11 | The infra template creates role, boundary, KMS key per project-env and the issuer trust with exact `aud`/`sub` | §6 | template assertions, simulator |
 | M12 | `klag op doctor` fails if a role reaches prod, a policy deviates, the issuer is unreachable or the STS exchange fails; `klag doctor` checks reachability and placeholder replacement | §6 | integration |
 | M13 | Daemon runs as the `klag` user, loopback only, operator socket 0660 group `klag-op`, no core dumps | §4,§8 | integration |
@@ -37,6 +37,7 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 | M19 | Spike report before the daemon work: issuer reachable by STS, role trust pinned to the daemon node; a failure goes back to the owner | §6,§10 | documented spike |
 | M20 | `klag setup` is idempotent, shows each privileged command before running it, never asks for or stores a credential, supports `--yes` and `--dry-run`, and ends with a passing `klag op doctor` | §3.2 | integration on a clean VM, dry-run snapshot |
 | M21 | Setup defaults follow INTERFACES.md; only the region, the project name and the AWS account ID are asked; the role ARN is derived | §3.2 | contract test |
+| M22 | `klag remove-all` prints every effect first, needs the typed hostname (or `--yes --confirm HOST`; `--yes` alone is refused), supports `--dry-run`, removes only what setup recorded, keeps the audit log unless `--purge-audit`, is idempotent and never touches AWS, Tailscale or the sandbox runtime | §3.3 | integration on a clean VM, negative test: no confirmation removes nothing |
 
 ## Good to have
 - **G1** `inject`: the value reaches the process or the sandbox proxy without reaching the agent.
