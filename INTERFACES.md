@@ -8,6 +8,7 @@ Rules live in [SPEC.md](SPEC.md); this file is the contract that contract tests 
 | `klag` | in a sandbox (agent) | the daemon at `KLAG_URL` (host loopback) through the sandbox proxy |
 | `klag setup` | on the host | the OS (`sudo`), `tailscale`, the tailnet issuer, STS |
 | `klag serve` | on the host | loopback HTTP, the operator socket, the tailnet issuer, AWS |
+| `klag remove-all` | on the host | the OS (`sudo`), the operator socket |
 | `klag op …` | on the host, outside sandboxes | the operator socket (group `klag-op`) |
 
 ## Agent CLI
@@ -47,16 +48,29 @@ Idempotent; run as the operator. It calls `sudo` only for the system step and pr
 
 Defaults, used without asking: tag `tag:klag-daemon`; issuer `https://idp.<tailnet>.ts.net` (the `tsidp` default hostname); `audience` `sts.amazonaws.com`; env `dev`; `listen` `127.0.0.1:7777`; `operatorSocket` `/run/klag/op.sock`; `audit.path` `/var/lib/klag/audit.jsonl`; `policy.get` `value`; `rateLimit` 60 per minute, burst 10; KMS alias `alias/{project}-dev`; role name `{project}-dev-agent`, so `roleArn` is `arn:aws:iam::<account id>:role/{project}-dev-agent`. Only the **region**, the **project name** (default: the current directory name) and the **AWS account ID** are asked. Setup never asks for or stores a credential.
 
+## Remove
+`klag remove-all [--dry-run] [--purge-audit] [--yes --confirm HOST]`
+
+Run as the operator; it calls `sudo` for the system steps. Idempotent. Exit codes: `0` ok, `1` usage or not confirmed (nothing removed), `6` a step failed.
+
+1. **Warning:** lists the effects: the service, the operator socket, `/etc/klag`, the registry with its N sandbox tokens (all revoked), user `klag` and group `klag-op`, and whether the audit log is kept.
+2. **Confirmation:** the operator types the hostname, or passes `--yes --confirm HOST`. Anything else aborts and removes nothing. `--yes` alone is refused. `--dry-run` prints the warning and changes nothing.
+3. **Removal:** stops and disables the service and deletes the items recorded by setup. The audit log is deleted only with `--purge-audit`.
+4. **Not done, printed for the administrator:** delete the CloudFormation stack in the AWS console (it holds the role and the KMS key; key deletion has a waiting period, to validate; parameters are written by `klag set`, not by the template, so they stay until deleted); remove the node or the tag in the Tailscale admin console; run `sbx secret rm … --sandbox <id>` for each sandbox (commands printed).
+
 ## Operator CLI
 | Command | Input | Output |
 |---|---|---|
 | `klag op list\|get\|set <project> <env> NAME` | value for `set` from stdin | as the agent CLI |
 | `klag op sandbox add <sandboxId> <project> <env>` | ids | the token, printed once (pipe it into the runtime secret store); only its hash is stored |
-| `klag op revoke <sandboxId>` | sandbox id | confirmation; the next request is denied |
+| `klag op sandbox revoke <sandboxId>` | sandbox id | confirmation; the next request is denied |
+| `klag op sandbox list` | none | sandbox id, project, env, created at (never the token) |
 | `klag op promote <project> NAME` | agent value to promote | shared name and version |
 | `klag op delete <project> <env> NAME` | name | confirmation |
 | `klag op doctor <project>` | project | checks: policy shape, prod unreachable, issuer reachable, STS exchange works |
 | `klag op audit verify` | none | `ok`, or the first broken line number |
+
+`<env>` is one of the environments listed in the config. Prod is never configured: setup and the daemon refuse an environment named `prod`.
 
 ## Environment and configuration
 - Agent side: `KLAG_URL`. The variable that carries the `auth` placeholder depends on the sandbox runtime (to validate).
