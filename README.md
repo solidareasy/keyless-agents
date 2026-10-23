@@ -8,4 +8,4 @@ klag get  DATABASE_URL    # value, only if the keyspace policy allows it
 klag set  API_TOKEN       # value from stdin or prompt, never from argv
 ```
 
-Status: draft v2. Design: [SPEC.md](SPEC.md). Requirements and tests: [REQUIREMENTS.md](REQUIREMENTS.md). License: MIT.
+Status: draft v3. Design: [SPEC.md](SPEC.md). Requirements and tests: [REQUIREMENTS.md](REQUIREMENTS.md). Inputs and outputs: [INTERFACES.md](INTERFACES.md). License: MIT.
