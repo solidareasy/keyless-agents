@@ -41,7 +41,8 @@ describe('supply chain contract', () => {
   });
 
   it('keeps generated files and local execution artifacts out of git', () => {
-    expect(trackedFiles.filter((path) => /^(node_modules|dist|coverage|\.superpowers)\//.test(path)))
-      .toEqual([]);
+    expect(
+      trackedFiles.filter((path) => /^(node_modules|dist|coverage|\.superpowers)\//.test(path)),
+    ).toEqual([]);
   });
 });
