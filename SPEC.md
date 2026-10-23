@@ -80,7 +80,7 @@ sequenceDiagram
 - System steps run through `sudo` and each command is shown first; `--dry-run` changes nothing.
 - It installs nothing it does not own (Tailscale, the sandbox runtime): preflight lists what is missing.
 - The tag must already exist in the tailnet ACLs, so setup prints the snippet first (to validate that `tailscale up` fails without it).
-- A human supplies three values: the region, the project name and the role ARN from the stack outputs. The rest is detected or defaulted.
+- A human supplies three values: the region, the project name and the AWS account ID (12 digits). The template fixes the role name (`{project}-dev-agent`), so the role ARN is derived from the account ID and confirmed by a real STS exchange. The rest is detected or defaulted.
 
 ## 4. Identity binding
 - The daemon listens on host loopback only (HTTP/JSON). The sandbox proxy replaces a placeholder in the request's `auth` field (body or header, never the query string) with a **per-instance token** scoped to that sandbox (`sbx secret set-custom … --sandbox`, experimental). The agent never sees the token.

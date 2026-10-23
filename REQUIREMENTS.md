@@ -36,7 +36,7 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 | M18 | AWS access only by `AssumeRoleWithWebIdentity` with the tailnet-issued JWT and a session policy; no static key or profile path exists in the code | §6 | contract test on config, integration |
 | M19 | Spike report before the daemon work: issuer reachable by STS, role trust pinned to the daemon node; a failure goes back to the owner | §6,§10 | documented spike |
 | M20 | `klag setup` is idempotent, shows each privileged command before running it, never asks for or stores a credential, supports `--yes` and `--dry-run`, and ends with a passing `klag op doctor` | §3.2 | integration on a clean VM, dry-run snapshot |
-| M21 | Setup defaults follow INTERFACES.md; only the region, the project name and the role ARN are asked | §3.2 | contract test |
+| M21 | Setup defaults follow INTERFACES.md; only the region, the project name and the AWS account ID are asked; the role ARN is derived | §3.2 | contract test |
 
 ## Good to have
 - **G1** `inject`: the value reaches the process or the sandbox proxy without reaching the agent.
