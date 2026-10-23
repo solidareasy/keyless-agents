@@ -13,7 +13,9 @@ function readTracked(path: string): string {
 
 describe('supply chain contract', () => {
   it('pins every workflow action to a commit with a version comment', () => {
-    const workflows = trackedFiles.filter((path) => /^\.github\/workflows\/[^/]+\.yml$/.test(path));
+    const workflows = trackedFiles.filter((path) =>
+      /^\.github\/workflows\/[^/]+\.ya?ml$/.test(path),
+    );
     expect(workflows.length).toBeGreaterThan(0);
     for (const path of workflows) {
       const uses = [...readTracked(path).matchAll(/^\s*(?:-\s*)?uses:\s*(.+)$/gm)];
