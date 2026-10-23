@@ -11,13 +11,14 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 - **P6** Agents see dev values; prod is never visible to agents.
 - **P7** Node 22+, pnpm, TypeScript strict, TDD (red, green, refactor).
 - **P8** The daemon serves only a registered sandbox of the real runtime. No transition mode; until agents run in sandboxes, dev uses the current flow. Host processes are outside the trust model.
+- **P9** A human provides once: a tailnet with an OIDC issuer reachable by AWS, an AWS administrator who applies the template with their own access, and an installed sandbox runtime. `klag setup` checks these and installs none of them.
 
 ## Must have (MVP)
 | ID | Requirement | SPEC | Test level |
 |---|---|---|---|
 | M1 | Keyspace comes from the registry; `project`/`env` in a payload is `INVALID` and audited | §4 | unit, property |
 | M2 | Project-env A cannot read or write project-env B; an agent value never shadows a shared one | §4,§5 | integration, e2e (two real sandboxes) |
-| M3 | Prod unreachable from dev: separate account, trust without any dev principal, explicit Deny on prod paths | §5,§6 | CDK assertions, IAM simulator |
+| M3 | Prod unreachable from dev: separate account, trust without any dev principal, explicit Deny on prod paths | §5,§6 | template assertions, IAM simulator |
 | M4 | `list` returns names and scopes only | §5 | unit, canary |
 | M5 | `get` returns the value only when the policy allows; otherwise deny | §5 | unit |
 | M6 | `set` writes only under `/{project}/dev/agent/*`, `SecureString` enforced by the daemon, value from stdin or prompt, no delete | §5,§6 | unit, IAM simulator |
@@ -25,7 +26,7 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 | M8 | Name normalization: reject `..`, `/`, `*`, empty, oversized, unexpected characters; `aws*` and `ssm*` reserved | §5 | property/fuzz |
 | M9 | Audit log hash-chained, daemon-owned 0600, never contains values | §7 | unit, tamper test |
 | M10 | Rate limit per sandbox; `revoke` denies the next request | §7 | integration |
-| M11 | CDK construct creates role, boundary, KMS key per project-env and the issuer trust with exact `aud`/`sub` | §6 | CDK assertions, simulator |
+| M11 | The infra template creates role, boundary, KMS key per project-env and the issuer trust with exact `aud`/`sub` | §6 | template assertions, simulator |
 | M12 | `klag op doctor` fails if a role reaches prod, a policy deviates, the issuer is unreachable or the STS exchange fails; `klag doctor` checks reachability and placeholder replacement | §6 | integration |
 | M13 | Daemon runs as the `klag` user, loopback only, operator socket 0660 group `klag-op`, no core dumps | §4,§8 | integration |
 | M14 | Release by npm trusted publishing with provenance; lockfile, exact deps, SHA-pinned Actions | §9 | CI check |
@@ -34,6 +35,8 @@ Design: [SPEC.md](SPEC.md) (§ points there). Inputs and outputs: [INTERFACES.md
 | M17 | `op sandbox add` prints the token once and stores only its hash; an unreplaced placeholder or unknown token is `DENIED` with `decision: alert` | §4 | integration, canary |
 | M18 | AWS access only by `AssumeRoleWithWebIdentity` with the tailnet-issued JWT and a session policy; no static key or profile path exists in the code | §6 | contract test on config, integration |
 | M19 | Spike report before the daemon work: issuer reachable by STS, role trust pinned to the daemon node; a failure goes back to the owner | §6,§10 | documented spike |
+| M20 | `klag setup` is idempotent, shows each privileged command before running it, never asks for or stores a credential, supports `--yes` and `--dry-run`, and ends with a passing `klag op doctor` | §3.2 | integration on a clean VM, dry-run snapshot |
+| M21 | Setup defaults follow INTERFACES.md; only the region, the project name and the role ARN are asked | §3.2 | contract test |
 
 ## Good to have
 - **G1** `inject`: the value reaches the process or the sandbox proxy without reaching the agent.
@@ -60,7 +63,7 @@ Every Deny and every "not found" has a negative test.
 1. Lint, strict typecheck, formatting.
 2. 100% unit coverage on the policy engine and the audit chain; no coverage ignores or `.skip`.
 3. Property and canary tests green.
-4. IAM simulator suite green on the synthesized CDK template.
+4. IAM simulator suite green on the rendered template.
 5. Secret scanning and `npm audit` clean; Actions pinned by SHA.
 6. Each gate proven to fail once (force the failure, require a non-zero exit) before it is trusted.
 7. Release only from main through trusted publishing with provenance.
