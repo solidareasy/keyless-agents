@@ -39,17 +39,39 @@ flowchart LR
 ```
 Prod sits in a separate AWS account that no dev role can reach. The daemon has no prod code path.
 
+### 3.1 Flows
+Sandbox registration (once per sandbox):
 ```mermaid
 sequenceDiagram
-  participant A as agent
+  participant O as operator
   participant D as daemon
-  participant S as AWS
-  A->>D: get NAME (auth placeholder, replaced by the sandbox proxy)
-  D->>D: keyspace from registry, normalize NAME, check policy and rate limit
-  D->>S: GetParameter (session policy limits path)
-  S-->>D: value
-  D->>D: audit {sandboxId, op, name, version, decision}
-  D-->>A: value (or deny)
+  participant K as host secret store (sandbox runtime)
+  participant S as sandbox
+  O->>D: klag op sandbox add S project dev
+  D->>D: store hash(token) → {project, dev, S}
+  D-->>O: token, printed once
+  O->>K: pipe the token into set-custom --sandbox S
+  O->>S: start the sandbox; the orchestrator starts the agent
+```
+Request (`get` shown; `list` and `set` take the same path):
+```mermaid
+sequenceDiagram
+  participant A as agent (sandbox)
+  participant P as sandbox proxy (host)
+  participant D as daemon
+  participant I as tailnet issuer
+  participant W as AWS (STS, SSM, KMS)
+  A->>P: get NAME + auth placeholder
+  P->>D: same request, placeholder replaced by the token
+  D->>D: hash(token) → {project, dev, S}; normalize NAME; policy; rate limit
+  D->>I: request a JWT (sub = daemon node)
+  I-->>D: JWT
+  D->>W: AssumeRoleWithWebIdentity + session policy
+  W-->>D: temporary credentials (cached until shortly before expiry)
+  D->>W: GetParameter /project/dev/NAME
+  W-->>D: value
+  D->>D: audit {sandboxId, taskId, op, name, version, decision}
+  D-->>A: value, or DENIED / NOT_FOUND / RATE_LIMITED
 ```
 
 ## 4. Identity binding
