@@ -31,7 +31,7 @@ flowchart LR
   OP -- "operator socket 0660, group klag-op" --> D
   D --- R
   D --> L
-  D -- "AssumeRole + session policy<br/>(profile on dev machines, web identity in CI)" --> STS[AWS STS]
+  D -- "AssumeRoleWithWebIdentity + session policy<br/>(tailnet issuer on the daemon host, GitHub OIDC in CI)" --> STS[AWS STS]
   STS --> ROLE["role: proj-dev-agent"]
   ROLE --> SSM["SSM /{project}/dev/*"]
   ROLE --> KMS["KMS key proj-dev"]
@@ -78,7 +78,7 @@ Path template: `/{project}/{env}/{name}` and `/{project}/{env}/agent/…`. `task
 - **Accounts**: dev and prod in separate AWS accounts. The dev role has no trust or action toward prod.
 - **Role per project-env** (`proj-dev-agent`): `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `parameter/{project}/dev/*`; `ssm:PutParameter` only on `parameter/{project}/dev/agent/*`; explicit `Deny` on `DeleteParameter(s)`, on any `prod` path and on other projects. A permission boundary caps the role. `DescribeParameters` is not granted (it lists names of every project in the account); listing uses `GetParametersByPath`.
 - **KMS**: one key per project-env, key policy naming only its roles, `kms:ViaService = ssm.<region>.amazonaws.com`. The read role has `Decrypt` only.
-- **Trust**: in CI, the GitHub OIDC provider with exact `aud` and `sub` (repo and environment). On dev machines the daemon uses an IAM Identity Center profile (no static key) and `sts:AssumeRole` into the project-env role; a tailnet OIDC issuer is a later option (G10). Short sessions; a session policy narrows the role per request.
+- **Trust**: in CI, the GitHub OIDC provider with exact `aud` and `sub` (repo and environment). On dev machines the target is a **tailnet OIDC issuer** (`tsidp` or `tsiam`): the daemon's host is a dedicated tailnet node with its own tag, and the role trusts that exact `sub` and `aud`, so there is no human login and no stored token. The issuer must be reachable by AWS to fetch its public keys (the spike M19 validates this). Until the spike passes, an IAM Identity Center profile with `sts:AssumeRole` is the fallback (`auth.type: profile`). Short sessions; a session policy narrows the role per request. **Sandboxes never join the tailnet and hold no AWS identity**; only the daemon's host does.
 - **Store**: SSM Parameter Store `SecureString` (path hierarchy gives prefix-based IAM at no cost). The daemon forces `Type=SecureString` with the project key (IAM has no condition for the type, to validate); CloudTrail reveals other types written outside the daemon. Rotation is out of the MVP; Secrets Manager is a possible later adapter.
 - Machine setup (sandbox runtime, network identity, AWS profile) is done with Ansible. CDK and Ansible hold names and paths only, never values.
 
@@ -99,6 +99,6 @@ Publish with npm trusted publishing (GitHub OIDC, no npm token) and provenance. 
 ## 10. To validate before coding
 - Whether one sandbox can serve several Orca worktrees (mount their parent directory) and how the orchestrator starts agents inside it.
 - That the sandbox proxy reaches a loopback daemon and that `set-custom` (experimental) substitutes the placeholder in a header or body; the placeholder format may change.
-- Session-policy behavior with `AssumeRole`, and how long an Identity Center session can be refreshed non-interactively by the `klag` user.
+- Spike M19: a tailnet issuer (`tsidp` is experimental, `tsiam` is third-party) that AWS STS can reach, `AssumeRoleWithWebIdentity` pinned to the daemon node, session-policy behavior, and the limits of the profile fallback.
 - Linux support level of the chosen sandbox runtime on non-Ubuntu distributions (best effort until tested).
 - npm trusted-publishing setup for a new package.

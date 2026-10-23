@@ -6,7 +6,7 @@ Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INT
 - **P1** Agents are untrusted and may be prompt-injected.
 - **P2** Dev and prod live in separate AWS accounts.
 - **P3** The sandbox runtime scopes a secret to one sandbox and its proxy substitutes it into requests; one sandbox serves one project-env with many worktrees (to validate, SPEC §10).
-- **P4** No static AWS keys: dev machines use an IAM Identity Center profile, CI uses GitHub OIDC.
+- **P4** No static AWS keys: dev machines authenticate through a tailnet OIDC issuer bound to the daemon node (fallback: IAM Identity Center profile); CI uses GitHub OIDC.
 - **P5** Dev secrets are burnable: scoped, revocable, rotated after any suspected leak.
 - **P6** The owner accepts that agents see dev values (`get: value`). Prod is never visible to agents.
 - **P7** Node 22+, pnpm, TypeScript strict, TDD (red, green, refactor).
@@ -56,7 +56,8 @@ Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INT
 | M15 | Written threat model and a dev-leak runbook | §2 | review |
 | M16 | CLI, protocol and config follow INTERFACES.md: exit codes, JSON shapes, error codes | INTERFACES | contract tests |
 | M17 | `op sandbox add` prints the token once and stores only its hash; `revoke` denies the next request; an unreplaced placeholder or unknown token is `DENIED` with `decision: alert` | §4 | integration, canary |
-| M18 | AWS auth per environment: Identity Center profile on dev machines, `AssumeRoleWithWebIdentity` in CI, session policy in both | §6 | contract test on config, integration |
+| M18 | AWS auth per environment: tailnet-issued web identity on the daemon host (fallback profile), GitHub OIDC in CI, session policy in all | §6 | contract test on config, integration |
+| M19 | Spike report before the daemon work: issuer reachable by STS, role trust pinned to the daemon node, fallback decision recorded | §6,§10 | documented spike |
 
 ## Good to have
 - **G1** `inject`: value reaches the process or the sandbox network proxy without reaching the agent.
@@ -68,7 +69,6 @@ Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INT
 - **G7** Secrets Manager adapter (rotation).
 - **G8** `klag op gc` and automatic expiry of task-scope parameters (SSM advanced-tier expiration policies, to validate).
 - **G9** `isolate: task` per-worktree sandboxes.
-- **G10** Tailnet OIDC issuer as the AWS identity for dev machines (replaces the profile).
 
 ## Test strategy
 | Level | Covers | Tooling |

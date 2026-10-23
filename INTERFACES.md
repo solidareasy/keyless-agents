@@ -63,7 +63,7 @@ JSON file at `KLAG_CONFIG` (default `~/.config/klag/config.json`). It holds no s
 | list | `ssm:GetParametersByPath` (no decryption) | values never decrypted for `list` (to validate) |
 | get | `ssm:GetParameter` with decryption | version returned to the caller |
 | set | `ssm:PutParameter` `Type=SecureString`, project key | path forced to `/{project}/dev/agent/…` |
-| auth | STS `AssumeRole` (profile) or `AssumeRoleWithWebIdentity` (CI), both with a session policy | role from the project entry |
+| auth | STS `AssumeRoleWithWebIdentity` (tailnet issuer, or GitHub OIDC in CI); `AssumeRole` only in the profile fallback; always with a session policy | role from the project entry |
 
 ## Files written
 Audit log, JSONL: `{ts, sandboxId, taskId, op, name, version, decision, prevHash, hash}`. `decision` is `allow`, `deny` or `alert`. The daemon writes no file that contains a value.
