@@ -82,10 +82,18 @@ sequenceDiagram
 - The tag must already exist in the tailnet ACLs, so setup prints the snippet first (to validate that `tailscale up` fails without it).
 - A human supplies three values: the region, the project name and the AWS account ID (12 digits). The template fixes the role name (`{project}-dev-agent`), so the role ARN is derived from the account ID and confirmed by a real STS exchange. The rest is detected or defaulted.
 
+### 3.3 Removal
+`klag remove-all` removes the host installation (flags and output in [INTERFACES.md](INTERFACES.md)). Rules:
+- It prints the exact effects first and refuses to run without an explicit confirmation: typing the hostname, or `--yes --confirm <hostname>` when non-interactive. `--yes` alone is refused.
+- It removes only what `klag setup` recorded in a root-owned manifest, so a pre-existing user or file is never touched.
+- It keeps the audit log unless `--purge-audit`, because the log is evidence.
+- It never touches what it cannot own: AWS (stack, role, KMS key, parameters), Tailscale (node, tag, issuer) and the sandbox runtime with its stored tokens. It prints the steps the administrator must take there.
+- It is idempotent.
+
 ## 4. Identity binding
 - The daemon listens on host loopback only (HTTP/JSON). The sandbox proxy replaces a placeholder in the request's `auth` field (body or header, never the query string) with a **per-instance token** scoped to that sandbox (`sbx secret set-custom … --sandbox`, experimental). The agent never sees the token.
 - The registry stores `hash(token) → {project, env, sandboxId}` and is the only source of the keyspace. A request carrying `project` or `env` is `INVALID` and audited as an anomaly. An unreplaced placeholder or unknown token is `DENIED`, audited with `decision: alert`.
-- `klag op sandbox add` prints a random token (≥128 bits) once. It lives as long as the sandbox; `revoke` deletes the hash.
+- `klag op sandbox add` prints a random token (≥128 bits) once. It lives as long as the sandbox; `op sandbox revoke` deletes the hash.
 - The operator socket is mode 0660, group `klag-op`, owned by the dedicated `klag` user, whose state holds the hashes. Until every agent runs in a real sandbox the host is outside the trust model (P8): without a registry entry the daemon serves nobody.
 
 **Granularity.** The boundary is the keyspace and all worktrees of a project-env share it, so one sandbox serves one project-env and many worktrees; splitting adds no secret isolation and only more memory.
@@ -95,11 +103,11 @@ Two scopes per project-env: **shared** `/{project}/dev/<name>` (written by the o
 
 | Operation | Agent | Operator |
 |---|---|---|
-| `list` | names of both scopes, no values | all environments |
+| `list` | names of both scopes, no values | all configured environments (never prod) |
 | `get` | value; shared wins over agent | any |
 | `set` | agent scope only | any dev path |
 | `promote` | no | copies an agent value into shared |
-| `delete`, `revoke` | no | yes |
+| `delete`, `sandbox revoke` | no | yes |
 
 The agent has no environment flag: its environment is fixed by the registry, so prod does not exist for it. Names: `/{project}/{env}/{name}`; names starting with `aws` or `ssm` are rejected (SSM limit); depth ≤ 15; no paths shared across projects.
 
