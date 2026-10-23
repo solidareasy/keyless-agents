@@ -19,23 +19,23 @@ Dev values are *burnable*: every dev secret must be scoped and revocable. With `
 ```mermaid
 flowchart LR
   subgraph Host
-    D["klag daemon<br/>unprivileged, socket 0600"]
+    D["klag daemon<br/>user klag, loopback only"]
     L[("audit log<br/>hash-chained")]
-    R["registry<br/>channel → project, env, sandboxId"]
+    R["registry<br/>hash(token) → project, env, sandboxId"]
   end
   subgraph SB["Sandbox (one per project-env, hosts N worktrees)"]
     AG["agent + klag CLI"]
   end
   OP["operator CLI<br/>(outside sandboxes)"]
-  AG -- "per-sandbox channel" --> D
-  OP -- "operator channel" --> D
+  AG -- "HTTP/JSON on loopback via the sandbox proxy<br/>placeholder becomes per-instance token" --> D
+  OP -- "operator socket 0660, group klag-op" --> D
   D --- R
   D --> L
-  D -- "OIDC web identity, session policy per request" --> STS[AWS STS]
+  D -- "AssumeRole + session policy<br/>(profile on dev machines, web identity in CI)" --> STS[AWS STS]
   STS --> ROLE["role: proj-dev-agent"]
-  ROLE --> SSM["SSM /proj/dev/*"]
+  ROLE --> SSM["SSM /{project}/dev/*"]
   ROLE --> KMS["KMS key proj-dev"]
-  PRODROLE["prod account: runtime role"] --> SSMP["SSM /proj/prod/*"]
+  PRODROLE["prod account: runtime role"] --> SSMP["SSM /{project}/prod/*"]
 ```
 Prod sits in a separate AWS account that no dev role can reach. The daemon has no prod code path.
 
@@ -44,7 +44,7 @@ sequenceDiagram
   participant A as agent
   participant D as daemon
   participant S as AWS
-  A->>D: get NAME (on its own channel)
+  A->>D: get NAME (auth placeholder, replaced by the sandbox proxy)
   D->>D: keyspace from registry, normalize NAME, check policy and rate limit
   D->>S: GetParameter (session policy limits path)
   S-->>D: value
@@ -53,50 +53,52 @@ sequenceDiagram
 ```
 
 ## 4. Identity binding
-- The daemon opens **one listener per sandbox** (unix socket or vsock mounted only into that sandbox). The channel is the identity, so there is no secret to steal. The registry maps channel → `{project, env, sandboxId}`.
-- The keyspace is always derived from the registry. Any `project` or `env` in a request payload is ignored and logged as an anomaly.
-- Fallback when a runtime cannot give a per-sandbox channel: random token (≥128 bits) stored only as a hash, bound to the sandbox id, TTL ≤15 min with renewal, revoked when the sandbox is destroyed.
-- The operator uses a separate channel unreachable from any sandbox.
+- The daemon listens on host loopback only (HTTP/JSON, one object per request). A sandbox reaches it through the runtime's host-side proxy, which replaces a placeholder in the `auth` field (body or header, never the query string) with a **per-instance token** scoped to that sandbox (`sbx secret set-custom … --sandbox`, experimental). The agent never sees the token.
+- The registry stores only `hash(token) → {project, env, sandboxId}`, and the keyspace always comes from it. A request carrying `project` or `env` is `INVALID` and audited as an anomaly. An unreplaced placeholder or an unknown token is `DENIED`, audited with `decision: alert`.
+- Token lifecycle: `klag op sandbox add <sandboxId> <project> <env>` stores the hash and prints a random token (≥128 bits) once, to be piped straight into the runtime's secret store. It lives as long as the sandbox; `revoke` deletes the hash. No token exists for any process outside a registered sandbox.
+- The operator socket is mode 0660, group `klag-op`, owned by the dedicated `klag` user, whose state holds the hashes. Until every agent runs in a real sandbox the host as a whole is outside the trust model (premise P8): the daemon serves no one without a registry entry.
 - `taskId`, sent by the agent, is advisory: it labels audit lines and the task scope for cleanup and never grants anything.
 
 ### 4.1 Sandbox granularity
-The security boundary is the keyspace, and all worktrees of a project-env share it, so **one sandbox serves one project-env and many worktrees**. Agents on different worktrees of the same project-env have the same trust and read the same shared values, so splitting them adds no secret isolation and only multiplies parameters and memory. Per-worktree sandboxes stay available (`isolate: task`) for untrusted code or risky tasks; they then get their own channel and task scope but still the same keyspace.
+The security boundary is the keyspace, and all worktrees of a project-env share it, so **one sandbox serves one project-env and many worktrees**. Agents on different worktrees of the same project-env have the same trust and read the same shared values, so splitting them adds no secret isolation and only multiplies parameters and memory. Per-worktree sandboxes stay available (`isolate: task`) for untrusted code or risky tasks; they then get their own token and task scope but still the same keyspace.
 
 ## 5. Keyspaces and operations
 | Operation | Agent in dev | Operator | Prod |
 |---|---|---|---|
-| `list` | names under `/p/dev/` (values stripped) | all | agent: `not found` |
+| `list` | names under `/{project}/dev/` (values stripped) | all | agent: `not found` |
 | `get` | `value` (policy `deny` available) | allowed | agent: `not found` |
-| `set` | `/p/dev/agent/*` (project scope) or `/p/dev/agent/tasks/<taskId>/*` (task scope) | any dev path | agent: `not found` |
-| `promote` | no | copies an agent value into `/p/dev/*` | no |
+| `set` | `/{project}/dev/agent/*` (project scope) or `/{project}/dev/agent/tasks/<taskId>/*` (task scope) | any dev path | agent: `not found` |
+| `promote` | no | copies an agent value into `/{project}/dev/*` | no |
 | `delete`, `revoke` | no | yes | no |
 
-`get NAME` resolves shared (`/p/dev/*`) first, then task scope, then project scope, so an agent value never shadows a shared one. `gc` removes a task scope when its task closes. `--env prod` answers exactly like a missing keyspace. Shared paths across projects do not exist; cross-project access needs an explicit operator grant.
+`get NAME` resolves shared (`/{project}/dev/*`) first, then task scope, then project scope, so an agent value never shadows a shared one. `gc` removes a task scope when its task closes. The agent has no `--env`: its environment is fixed by the registry, so prod does not exist for it.
+Path template: `/{project}/{env}/{name}` and `/{project}/{env}/agent/…`. `tasks` is reserved under the agent scope; names starting with `aws` or `ssm` are rejected (SSM limit); depth ≤ 15. Shared paths across projects do not exist; cross-project access needs an explicit operator grant.
 
 ## 6. AWS layout (created by the CDK construct)
 - **Accounts**: dev and prod in separate AWS accounts. The dev role has no trust or action toward prod.
-- **Role per project-env** (`proj-dev-agent`): `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `parameter/proj/dev/*`; `ssm:PutParameter` only on `parameter/proj/dev/agent/*`; explicit `Deny` on `DeleteParameter(s)`, on any `prod` path and on other projects. A permission boundary caps the role. `DescribeParameters` is not granted (it lists names of every project in the account); listing uses `GetParametersByPath`.
+- **Role per project-env** (`proj-dev-agent`): `ssm:GetParameter`, `GetParameters`, `GetParametersByPath` on `parameter/{project}/dev/*`; `ssm:PutParameter` only on `parameter/{project}/dev/agent/*`; explicit `Deny` on `DeleteParameter(s)`, on any `prod` path and on other projects. A permission boundary caps the role. `DescribeParameters` is not granted (it lists names of every project in the account); listing uses `GetParametersByPath`.
 - **KMS**: one key per project-env, key policy naming only its roles, `kms:ViaService = ssm.<region>.amazonaws.com`. The read role has `Decrypt` only.
-- **Trust**: OIDC provider with exact `aud` and `sub` (CI: repo and environment; machines: the host or sandbox identity), short session duration. A session policy narrows the role per request.
-- **Store**: SSM Parameter Store `SecureString` (path hierarchy gives prefix-based IAM at no cost). Rotation is out of the MVP; Secrets Manager is a possible later adapter.
+- **Trust**: in CI, the GitHub OIDC provider with exact `aud` and `sub` (repo and environment). On dev machines the daemon uses an IAM Identity Center profile (no static key) and `sts:AssumeRole` into the project-env role; a tailnet OIDC issuer is a later option (G10). Short sessions; a session policy narrows the role per request.
+- **Store**: SSM Parameter Store `SecureString` (path hierarchy gives prefix-based IAM at no cost). The daemon forces `Type=SecureString` with the project key (IAM has no condition for the type, to validate); CloudTrail reveals other types written outside the daemon. Rotation is out of the MVP; Secrets Manager is a possible later adapter.
 - Machine setup (sandbox runtime, network identity, AWS profile) is done with Ansible. CDK and Ansible hold names and paths only, never values.
 
 ## 7. Audit, limits and revocation
 - Audit log: JSONL, append-only, each line carries the hash of the previous one, file owned by the daemon user (0600). Fields: timestamp, sandboxId, taskId (advisory), operation, name, version, decision. Never values. CloudTrail is the independent second record.
-- Rate limit per sandbox with burst; a `list` sweep followed by `get` of every name raises an alert.
-- `klag revoke <sandboxId>` kills the channel or token immediately.
+- Rate limit per sandbox with burst; a `list` sweep followed by `get` of every name raises an alert; in the MVP an alert is an audit line with `decision: alert`, external delivery is G4.
+- `klag op revoke <sandboxId>` deletes the token hash, so the next request is denied.
 
 ## 8. CLI and daemon hygiene
 - `set` reads the value from stdin or a prompt, never argv. Values never appear in argv, logs, error messages, stack traces, process title or the audit log. AWS SDK errors are sanitized before they leave the daemon.
 - The daemon runs unprivileged, with core dumps disabled and non-dumpable memory, socket mode 0600 and systemd hardening.
 - `process.env` is read only in the config module.
+- The daemon never listens outside loopback; the VM → proxy hop is plain HTTP inside the sandbox private network (accepted).
 
 ## 9. Supply chain
 Publish with npm trusted publishing (GitHub OIDC, no npm token) and provenance. Lockfile committed, exact dependency versions, minimal runtime dependencies, GitHub Actions pinned by commit SHA, 2FA for maintainers, secret scanning in CI.
 
 ## 10. To validate before coding
 - Whether one sandbox can serve several Orca worktrees (mount their parent directory) and how the orchestrator starts agents inside it.
-- Which sandbox runtime exposes a per-sandbox channel (socket or vsock) to the guest, and how the daemon learns the sandbox id.
-- IAM condition keys to force `SecureString` on `PutParameter` and the exact behavior of session policies with web identity.
+- That the sandbox proxy reaches a loopback daemon and that `set-custom` (experimental) substitutes the placeholder in a header or body; the placeholder format may change.
+- Session-policy behavior with `AssumeRole`, and how long an Identity Center session can be refreshed non-interactively by the `klag` user.
 - Linux support level of the chosen sandbox runtime on non-Ubuntu distributions (best effort until tested).
 - npm trusted-publishing setup for a new package.
