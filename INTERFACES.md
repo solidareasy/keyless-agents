@@ -10,19 +10,7 @@ Rules and rationale live in [SPEC.md](SPEC.md); this file is the contract that c
 | `klag op …` | on the host, outside sandboxes | the operator socket (group `klag-op`) |
 
 ## Agent CLI
-`NAME` matches `^(?!\.{1,2}$)[A-Za-z0-9_.-]{1,128}# klag interfaces (inputs and outputs)
-
-Rules and rationale live in [SPEC.md](SPEC.md); this file is the contract that contract tests check.
-
-## Binaries
-| Binary | Runs | Talks to |
-|---|---|---|
-| `klag` | inside a sandbox (agent) | the daemon URL (`KLAG_URL`, host loopback) through the sandbox proxy |
-| `klag serve` | on the host | loopback HTTP, the operator socket, AWS |
-| `klag op …` | on the host, outside sandboxes | the operator socket (group `klag-op`) |
-
-## Agent CLI
-`NAME` matches . Every command accepts `--json`.
+`NAME` matches `^(?!\.{1,2}$)[A-Za-z0-9_.-]{1,128}$`. Every command accepts `--json`.
 
 | Command | Input | stdout | Exit codes |
 |---|---|---|---|

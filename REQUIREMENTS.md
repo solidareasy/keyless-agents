@@ -22,31 +22,7 @@ Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INT
 | M5 | `get` returns the value only when the policy allows; otherwise deny | §5 | unit |
 | M6 | `set` writes only under `/{project}/dev/agent/*` or `/{project}/dev/agent/tasks/<taskId>/*`, as `SecureString` (type enforced by the daemon), value from stdin or prompt, no delete | §5,§6 | unit, IAM simulator |
 | M7 | No value in argv, logs, errors, stack traces, process title or audit | §8 | canary secret test |
-| M8 | Name normalization: reject `..`, `/`, `*`, empty, oversized, unexpected characters; `taskId` matches `^[A-Za-z0-9_-]{1,64}# klag requirements
-
-Design lives in [SPEC.md](SPEC.md) (§ points there); inputs and outputs in [INTERFACES.md](INTERFACES.md). Each requirement has one ID, one test level and no duplicate in another section.
-
-## Premises
-- **P1** Agents are untrusted and may be prompt-injected.
-- **P2** Dev and prod live in separate AWS accounts.
-- **P3** The sandbox runtime scopes a secret to one sandbox and its proxy substitutes it into requests; one sandbox serves one project-env with many worktrees (to validate, SPEC §10).
-- **P4** No static AWS keys: dev machines use an IAM Identity Center profile, CI uses GitHub OIDC.
-- **P5** Dev secrets are burnable: scoped, revocable, rotated after any suspected leak.
-- **P6** The owner accepts that agents see dev values (`get: value`). Prod is never visible to agents.
-- **P7** Node 22+, pnpm, TypeScript strict, TDD (red, green, refactor).
-- **P8** The daemon serves a keyspace only to a registered sandbox of the real runtime. There is no transition mode: until agents run in sandboxes, dev uses the current flow. Host processes are outside the trust model.
-
-## Must have (MVP)
-| ID | Requirement | SPEC | Test level |
-|---|---|---|---|
-| M1 | Keyspace comes from the registry; `project`/`env` in a payload is `INVALID` and audited | §4 | unit, property |
-| M2 | Project-env A cannot read or write project-env B; an agent value never shadows a shared value | §4,§5 | integration, e2e (two real sandboxes) |
-| M3 | Prod is unreachable from dev: separate account, trust without any dev principal, explicit Deny on prod paths | §5,§6 | CDK assertions, IAM policy simulator |
-| M4 | `list` returns names only | §5 | unit, canary |
-| M5 | `get` returns the value only when the policy allows; otherwise deny | §5 | unit |
-| M6 | `set` writes only under `/{project}/dev/agent/*` or `/{project}/dev/agent/tasks/<taskId>/*`, as `SecureString` (type enforced by the daemon), value from stdin or prompt, no delete | §5,§6 | unit, IAM simulator |
-| M7 | No value in argv, logs, errors, stack traces, process title or audit | §8 | canary secret test |
-| M8 | ; `tasks`, `aws*`, `ssm*` are reserved | §4 | property/fuzz |
+| M8 | Name normalization: reject `..`, `/`, `*`, empty, oversized, unexpected characters; `taskId` matches `^[A-Za-z0-9_-]{1,64}$`; `tasks`, `aws*`, `ssm*` are reserved | §4 | property/fuzz |
 | M9 | Audit log is hash-chained, daemon-owned 0600, never contains values | §7 | unit, tamper test |
 | M10 | Rate limit per sandbox; `revoke` kills access immediately | §7 | integration |
 | M11 | CDK construct creates role, boundary, KMS key per project-env and OIDC trust with exact `aud`/`sub` | §6 | CDK assertions, simulator |
