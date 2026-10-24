@@ -49,7 +49,7 @@ describe('validateName', () => {
     expect(validateName(input)).toEqual({ ok: false, code });
   });
 
-  it('rejects a final newline instead of accepting a partial regex match', () => {
+  it('rejects a final newline', () => {
     expect(validateName('canary-name\n')).toEqual({ ok: false, code: 'INVALID_CHAR' });
   });
 });
