@@ -31,7 +31,7 @@ it('keeps the exact documented protocol error set at runtime and in types', () =
 });
 
 it('maps CLI exits and protocol errors to the numbers extracted from Agent CLI', () => {
-  const cli = doc.match(/## Agent CLI\n([\s\S]*?)\n## Protocol/)?.[1] ?? '';
+  const cli = doc.match(/## Agent CLI\r?\n([\s\S]*?)\r?\n## Protocol/)?.[1] ?? '';
   const line = cli.match(/Exit codes: ([^\n]+)/)?.[1] ?? '';
   const extracted = [...line.matchAll(/`(\d+)` ([^,.]+)/g)];
   expect(extracted).toHaveLength(7);
