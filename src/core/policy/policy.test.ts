@@ -194,4 +194,31 @@ describe('writePath', () => {
     expect(writePath(operator, name, 'agent')).toBe('/canary-app/dev/agent/canary-name');
     expect(writePath(operator, name, 'shared')).toBe('/canary-app/dev/canary-name');
   });
+
+  it('always confines generated agent writes to their registered agent prefix', () => {
+    const project = fc
+      .array(fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789-'), {
+        minLength: 1,
+        maxLength: 25,
+      })
+      .map((suffix) => `canary-${suffix.join('')}` as Project);
+    const registeredKeyspace = fc.record({
+      project,
+      env: fc.constantFrom('dev' as Env, 'canary-stage' as Env),
+    });
+    fc.assert(
+      fc.property(
+        registeredKeyspace,
+        validName,
+        fc.constantFrom<Scope>('shared', 'agent'),
+        (keyspace, name, scope) => {
+          const subject: Subject = { kind: 'agent', sandboxId: 'canary-sandbox', keyspace };
+          expect(writePath(subject, name, scope)).toBe(
+            `/${keyspace.project}/${keyspace.env}/agent/${name}`,
+          );
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
 });
