@@ -46,3 +46,12 @@ it('roundtrips all valid response shapes through JSON', () => {
     { numRuns: 300 },
   );
 });
+
+it('never throws while decoding arbitrary text', () => {
+  fc.assert(
+    fc.property(fc.string(), (text) => {
+      expect(() => decodeJson(text)).not.toThrow();
+    }),
+    { numRuns: 300 },
+  );
+});
