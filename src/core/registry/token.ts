@@ -9,6 +9,7 @@ export function hashToken(token: string): string {
 }
 
 export function tokensEqual(aHex: string, bHex: string): boolean {
+  if (!/^[0-9a-f]{64}$/.test(aHex) || !/^[0-9a-f]{64}$/.test(bHex)) return false;
   const a = Buffer.from(aHex, 'hex');
   const b = Buffer.from(bHex, 'hex');
   return a.length === b.length && timingSafeEqual(a, b);

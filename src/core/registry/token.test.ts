@@ -16,3 +16,16 @@ it('compares decoded hashes and rejects different sizes without throwing', () =>
   expect(tokensEqual('ab'.repeat(32), 'cd'.repeat(32))).toBe(false);
   expect(tokensEqual('ab', 'abcd')).toBe(false);
 });
+
+it.each([
+  ['', 'zz'],
+  ['', ''],
+  ['ab', 'ab'],
+  ['a'.repeat(63), 'a'.repeat(63)],
+  ['ab'.repeat(32).toUpperCase(), 'ab'.repeat(32)],
+  ['ab'.repeat(32), 'ab'.repeat(32).toUpperCase()],
+  ['ab'.repeat(32) + 'zz', 'ab'.repeat(32)],
+  ['ab'.repeat(32), 'ab'.repeat(32) + 'zz'],
+])('rejects non-canonical SHA-256 hex without throwing %#', (a, b) => {
+  expect(tokensEqual(a, b)).toBe(false);
+});

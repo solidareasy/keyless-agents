@@ -194,3 +194,8 @@ it('keeps the plaintext canary out of persisted JSON independently of lookup', (
   expect(JSON.stringify(registry.list())).not.toContain(canary);
   expect(store.load()[0]?.tokenHash).toMatch(/^[a-f0-9]{64}$/);
 });
+
+it('denies a stored hash with a non-hex suffix', () => {
+  entries = [{ ...entry, tokenHash: tokens.hashToken(canary) + 'zz' }];
+  expect(registry.lookup(canary)).toBeNull();
+});
