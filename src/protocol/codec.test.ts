@@ -33,5 +33,5 @@ it.each([
   ['[]', []],
   ['"canary-text"', 'canary-text'],
 ])('decodes arbitrary JSON case %#', (text, value) => {
-  expect(decodeJson(text as string)).toEqual({ ok: true, value });
+  expect(decodeJson(text)).toEqual({ ok: true, value });
 });
