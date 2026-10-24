@@ -16,3 +16,12 @@ npx klag op setup           # daemon container, tailnet node, AWS template, conf
 ```
 
 Status: draft v4. Design: [SPEC.md](SPEC.md). Requirements and tests: [REQUIREMENTS.md](REQUIREMENTS.md). Inputs and outputs: [INTERFACES.md](INTERFACES.md). License: MIT.
+
+## Development
+
+Use Node 22+ and pnpm 10.28.0. The current CLI scaffold prints usage only.
+
+```sh
+pnpm install
+pnpm check
+```
