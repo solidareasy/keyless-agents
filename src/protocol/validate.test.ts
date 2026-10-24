@@ -121,3 +121,15 @@ it('rejects accessors whose operation can change after validation', () => {
   op = 'set';
   expect(result).toEqual({ ok: false, code: 'INVALID', reason: 'BAD_TYPE' });
 });
+
+it('returns an invalid result when a proxy presence check throws', () => {
+  const input = new Proxy(
+    {},
+    {
+      has() {
+        throw new Error('canary-trap');
+      },
+    },
+  );
+  expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason: 'BAD_TYPE' });
+});
