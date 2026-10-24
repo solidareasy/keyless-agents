@@ -1,0 +1,38 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+
+export function buildCli(): void {
+  execFileSync('mise', ['exec', 'node@22', '--', 'pnpm', 'build'], { stdio: 'pipe' });
+}
+
+export function cli(url: string, auth: string, args: string[], stdin = '', imports: string[] = []) {
+  return new Promise<{ code: number | null; stdout: string; stderr: string; errors: string[] }>(
+    (resolveResult, reject) => {
+      const child = spawn(
+        process.execPath,
+        [...imports.flatMap((path) => ['--import', path]), resolve('dist/cli/main.js'), ...args],
+        {
+          env: { KLAG_URL: url, KLAG_AUTH: auth },
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      );
+      let stdout = '';
+      let stderr = '';
+      const errors: string[] = [];
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk: string) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk: string) => {
+        stderr += chunk;
+      });
+      child.on('error', reject);
+      child.stdin.on('error', (error: Error) => {
+        errors.push(String(error), error.stack ?? '');
+      });
+      child.on('close', (code) => resolveResult({ code, stdout, stderr, errors }));
+      child.stdin.end(stdin);
+    },
+  );
+}
