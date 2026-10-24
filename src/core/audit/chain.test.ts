@@ -165,3 +165,9 @@ it.each(['prevHash', 'hash'])(
     ).toEqual({ ok: false, line: 1, reason: 'SHAPE' });
   },
 );
+
+it('continues to verify a correctly hashed line with an explicit null version', () => {
+  const entry = appendEntry(GENESIS_HASH, { ...fields, version: null });
+  expect(entry.line).toContain('"version":null');
+  expect(verifyChain([entry.line])).toEqual({ ok: true, count: 1, lastHash: entry.hash });
+});

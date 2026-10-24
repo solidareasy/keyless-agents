@@ -8,7 +8,8 @@ export function validateAuditFields(input: unknown, stage: 'shape' | 'enums'): b
       typeof fields.sandboxId === 'string' &&
       typeof fields.op === 'string' &&
       (fields.name === null || typeof fields.name === 'string') &&
-      (fields.version === null || typeof fields.version === 'number') &&
+      (fields.version === null ||
+        (typeof fields.version === 'number' && Number.isFinite(fields.version))) &&
       typeof fields.decision === 'string'
     );
   }

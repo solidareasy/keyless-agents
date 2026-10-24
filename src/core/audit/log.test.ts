@@ -143,3 +143,16 @@ it('shares the shape and enum validator between recording and chain verification
     validation.mockRestore();
   }
 });
+
+it.each([NaN, Infinity, -Infinity])(
+  'rejects a non-finite version without persisting or breaking the instance %#',
+  (version) => {
+    const target = sink();
+    const log = new AuditLog(target);
+    expect(() => log.record({ ...fields, version })).toThrow(new TypeError('Invalid audit fields'));
+    expect(target.readAll()).toEqual([]);
+    const hash = log.record({ ...fields, version: 1 });
+    expect(target.readAll()).toEqual([appendEntry(GENESIS_HASH, { ...fields, version: 1 }).line]);
+    expect(log.verify()).toEqual({ ok: true, count: 1, lastHash: hash });
+  },
+);
