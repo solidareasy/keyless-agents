@@ -52,7 +52,7 @@ it('keeps the previous hash when the sink fails before appending', () => {
   const target = sink();
   let fail = true;
   const log = new AuditLog({
-    readAll: target.readAll,
+    readAll: () => target.readAll(),
     append: (line) => {
       if (fail) throw new Error('Canary write failure');
       target.append(line);

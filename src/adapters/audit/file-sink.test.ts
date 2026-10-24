@@ -76,9 +76,27 @@ it('detects a truncated final append and refuses recording on restart', () => {
     version: null,
     decision: 'deny' as const,
   };
-  new AuditLog(new FileAuditSink(path)).record(fields);
+  const sink = new FileAuditSink(path);
+  new AuditLog(sink).record(fields);
   appendFileSync(path, '{"ts":');
-  const log = new AuditLog(new FileAuditSink(path));
+  const log = new AuditLog(sink);
   expect(log.verify()).toEqual({ ok: false, line: 2, reason: 'PARSE' });
   expect(() => log.record(fields)).toThrow(AuditChainBroken);
+});
+
+it('refuses an otherwise valid existing record without a final newline, preserving its bytes', () => {
+  const path = temporaryPath();
+  const fields = {
+    ts: 'canary-ts',
+    sandboxId: 'canary-sandbox',
+    op: 'list' as const,
+    name: null,
+    version: null,
+    decision: 'allow' as const,
+  };
+  new AuditLog(new FileAuditSink(path)).record(fields);
+  const unterminated = readFileSync(path, 'utf8').slice(0, -1);
+  writeFileSync(path, unterminated);
+  expect(() => new FileAuditSink(path)).toThrow('Audit file must end with a newline');
+  expect(readFileSync(path, 'utf8')).toBe(unterminated);
 });
