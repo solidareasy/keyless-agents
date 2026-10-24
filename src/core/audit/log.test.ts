@@ -1,4 +1,5 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import * as auditFields from './fields.js';
 import { appendEntry, GENESIS_HASH } from './chain.js';
 import type { AuditFields } from './chain.js';
 import { AuditChainBroken, AuditLog } from './log.js';
@@ -97,4 +98,48 @@ it('records only the eight audit keys from a request with a canary value', () =>
     'prevHash',
     'hash',
   ]);
+});
+
+it.each(['ts', 'sandboxId', 'op', 'name', 'version', 'decision'])(
+  'rejects missing %s without persisting or breaking the instance',
+  (key) => {
+    const target = sink();
+    const log = new AuditLog(target);
+    const invalid: Record<string, unknown> = { ...fields };
+    delete invalid[key];
+    expect(() => log.record(invalid as AuditFields)).toThrow('Invalid audit fields');
+    expect(target.readAll()).toEqual([]);
+    const hash = log.record(fields);
+    expect(log.verify()).toEqual({ ok: true, count: 1, lastHash: hash });
+  },
+);
+
+it.each([
+  { ...fields, op: 'unknown' },
+  { ...fields, decision: 'unknown' },
+  { ...fields, ts: 42 },
+  { ...fields, sandboxId: 42 },
+])('rejects invalid field types and enums without poisoning storage %#', (invalid) => {
+  const target = sink();
+  const log = new AuditLog(target);
+  expect(() => log.record(invalid as AuditFields)).toThrow('Invalid audit fields');
+  expect(target.readAll()).toEqual([]);
+  const hash = log.record(fields);
+  expect(log.verify()).toEqual({ ok: true, count: 1, lastHash: hash });
+});
+
+it('shares the shape and enum validator between recording and chain verification', () => {
+  const validation = vi.spyOn(auditFields, 'validateAuditFields');
+  try {
+    const log = new AuditLog(sink());
+    log.record(fields);
+    expect(validation).toHaveBeenCalledWith(fields, 'shape');
+    expect(validation).toHaveBeenCalledWith(fields, 'enums');
+    validation.mockClear();
+    expect(log.verify().ok).toBe(true);
+    expect(validation).toHaveBeenCalledWith(expect.objectContaining(fields), 'shape');
+    expect(validation).toHaveBeenCalledWith(expect.objectContaining(fields), 'enums');
+  } finally {
+    validation.mockRestore();
+  }
 });

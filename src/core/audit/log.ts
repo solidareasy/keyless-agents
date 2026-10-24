@@ -1,4 +1,4 @@
-import { appendEntry, GENESIS_HASH, verifyChain } from './chain.js';
+import { appendEntry, GENESIS_HASH, validateAuditFields, verifyChain } from './chain.js';
 import type { AuditFields } from './chain.js';
 
 export interface AuditSink {
@@ -25,6 +25,9 @@ export class AuditLog {
 
   record(fields: AuditFields): string {
     if (this.broken) throw new AuditChainBroken();
+    if (!validateAuditFields(fields, 'shape') || !validateAuditFields(fields, 'enums')) {
+      throw new TypeError('Invalid audit fields');
+    }
     const entry = appendEntry(this.lastHash, fields);
     try {
       this.sink.append(entry.line);

@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { validateAuditFields } from './fields.js';
+
+export { validateAuditFields };
 
 export type AuditFields = {
   ts: string;
@@ -38,18 +41,12 @@ type Verification =
   | { ok: false; line: number; reason: 'PARSE' | 'SHAPE' | 'PREV_MISMATCH' | 'HASH_MISMATCH' };
 
 function hasShape(input: unknown): input is AuditEntry {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false;
+  if (!validateAuditFields(input, 'shape')) return false;
   const entry = input as Record<string, unknown>;
   const keys = ['ts', 'sandboxId', 'op', 'name', 'version', 'decision', 'prevHash', 'hash'];
   return (
     Object.keys(entry).length === keys.length &&
     keys.every((key) => Object.hasOwn(entry, key)) &&
-    typeof entry.ts === 'string' &&
-    typeof entry.sandboxId === 'string' &&
-    typeof entry.op === 'string' &&
-    (entry.name === null || typeof entry.name === 'string') &&
-    (entry.version === null || typeof entry.version === 'number') &&
-    typeof entry.decision === 'string' &&
     typeof entry.prevHash === 'string' &&
     /^[a-f0-9]{64}$/.test(entry.prevHash) &&
     typeof entry.hash === 'string' &&
@@ -78,10 +75,7 @@ export function verifyChain(lines: Iterable<string>): Verification {
     if (entry.prevHash !== lastHash) return { ok: false, line, reason: 'PREV_MISMATCH' };
     if (hashLine(entry, entry.prevHash) !== entry.hash)
       return { ok: false, line, reason: 'HASH_MISMATCH' };
-    if (
-      !['list', 'get', 'set', 'promote', 'delete'].includes(entry.op) ||
-      !['allow', 'deny', 'alert'].includes(entry.decision)
-    ) {
+    if (!validateAuditFields(entry, 'enums')) {
       return { ok: false, line, reason: 'SHAPE' };
     }
     lastHash = entry.hash;
