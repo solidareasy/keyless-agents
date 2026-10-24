@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { Keyspace } from '../names/keyspace.js';
 import type { Env, Name, Project } from '../names/names.js';
@@ -70,6 +71,18 @@ describe('resolveGet', () => {
   it.each(['', 0, false, undefined])('preserves a present falsy entry %#', (value) => {
     expect(resolveGet<unknown>(value, 'canary-agent')).toEqual({ scope: 'shared', value });
     expect(resolveGet<unknown>(null, value)).toEqual({ scope: 'agent', value });
+  });
+
+  it('always selects shared when both entries are non-null', () => {
+    const present = fc.anything().filter((entry) => entry !== null);
+    fc.assert(
+      fc.property(present, present, (shared, agent) => {
+        const resolved = resolveGet(shared, agent);
+        expect(resolved?.scope).toBe('shared');
+        expect(resolved?.value).toBe(shared);
+      }),
+      { numRuns: 500 },
+    );
   });
 });
 
