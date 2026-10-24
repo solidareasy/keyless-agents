@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import type { Keyspace } from '../names/keyspace.js';
+import type { Keyspace, Scope } from '../names/keyspace.js';
 import type { Env, Name, Project } from '../names/names.js';
 import { decide, listView, resolveGet, writePath } from './policy.js';
 import type { Actor, Decision, Operation, PolicyConfig, Subject } from './policy.js';
@@ -8,6 +8,12 @@ import type { Actor, Decision, Operation, PolicyConfig, Subject } from './policy
 const keyspace: Keyspace = { project: 'canary-app' as Project, env: 'dev' as Env };
 const agent: Subject = { kind: 'agent', sandboxId: 'canary-sandbox', keyspace };
 const operator: Subject = { kind: 'operator', keyspace };
+const validName = fc
+  .array(fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-'), {
+    minLength: 0,
+    maxLength: 121,
+  })
+  .map((characters) => `canary-${characters.join('')}` as Name);
 
 describe('decide', () => {
   const cases: Array<[Actor, Operation, PolicyConfig['get'], Decision]> = [
@@ -89,6 +95,55 @@ describe('resolveGet', () => {
 describe('listView', () => {
   it('returns an empty list for no entries', () => {
     expect(listView([])).toEqual([]);
+  });
+
+  it('keeps shared before agent when the input already has that order', () => {
+    expect(
+      listView([
+        { name: 'canary-a' as Name, scope: 'shared', version: 1 },
+        { name: 'canary-a' as Name, scope: 'agent', version: 2 },
+      ]),
+    ).toEqual([
+      { name: 'canary-a', scope: 'shared' },
+      { name: 'canary-a', scope: 'agent' },
+    ]);
+  });
+
+  it('exposes only exact metadata keys while preserving multiplicity and stable ordering', () => {
+    const entries = fc.array(
+      fc.record({
+        name: fc.oneof(validName, fc.constantFrom('canary-a' as Name, 'canary-b' as Name)),
+        scope: fc.constantFrom<Scope>('shared', 'agent'),
+        version: fc.nat(),
+        value: fc.anything(),
+      }),
+      { maxLength: 50 },
+    );
+    fc.assert(
+      fc.property(entries, (input) => {
+        const before = structuredClone(input);
+        const result = listView(input);
+        expect(result).toHaveLength(input.length);
+        expect(input).toEqual(before);
+        for (const [index, item] of result.entries()) {
+          expect(Object.keys(item)).toEqual(['name', 'scope']);
+          const previous = result[index - 1];
+          if (previous !== undefined) {
+            expect(previous.name <= item.name).toBe(true);
+            if (previous.name === item.name && previous.scope === 'agent') {
+              expect(item.scope).toBe('agent');
+            }
+          }
+          expect(
+            result.filter((entry) => entry.name === item.name && entry.scope === item.scope),
+          ).toHaveLength(
+            input.filter((entry) => entry.name === item.name && entry.scope === item.scope).length,
+          );
+        }
+        expect(listView(input)).toEqual(result);
+      }),
+      { numRuns: 500 },
+    );
   });
 
   it('projects names and scopes, sorting names and shared before agent without mutating input', () => {
