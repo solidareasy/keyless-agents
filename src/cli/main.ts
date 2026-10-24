@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
+import { startDaemon } from '../daemon/main.js';
 import { validateName } from '../core/names/names.js';
 import { exitCodeFor, humanMessage } from '../protocol/errors.js';
 import type { Request } from '../protocol/messages.js';
@@ -54,6 +55,7 @@ export type CliIO = {
   config: typeof loadCliConfig;
   request: typeof request;
   readValue: () => Promise<string>;
+  serve: typeof startDaemon;
 };
 const usage = 'Usage: klag list [--prefix P] | get NAME | set NAME | doctor | serve [--json]\n';
 
@@ -69,6 +71,7 @@ export async function main(
     stderr: (text) => {
       process.stderr.write(text);
     },
+    serve: startDaemon,
     config: loadCliConfig,
     request,
     readValue,
@@ -83,6 +86,13 @@ export async function main(
     return 0;
   }
   const [op, ...args] = argv;
+  if (op === 'serve') {
+    if (args.length !== 0) return error('INVALID');
+    const started = await io.serve();
+    if (started.ok) return 0;
+    io.stderr(started.message + '\n');
+    return 5;
+  }
   if (op !== 'list' && op !== 'get' && op !== 'set' && op !== 'doctor') return error('INVALID');
   let json = false;
   let prefix: string | undefined;

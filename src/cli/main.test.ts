@@ -24,6 +24,7 @@ function harness(response: OkResponse = { v: 1, ok: true, names: [] }) {
     }),
     request: vi.fn<CliIO['request']>().mockResolvedValue(response),
     readValue: () => Promise.resolve('canary-input'),
+    serve: () => Promise.resolve({ ok: false, message: 'Daemon startup failed.' }),
   };
   return { io, output: () => ({ stdout, stderr }) };
 }
