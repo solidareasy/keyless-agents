@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Keyspace } from '../names/keyspace.js';
-import type { Env, Project } from '../names/names.js';
-import { decide, resolveGet } from './policy.js';
+import type { Env, Name, Project } from '../names/names.js';
+import { decide, listView, resolveGet } from './policy.js';
 import type { Actor, Decision, Operation, PolicyConfig, Subject } from './policy.js';
 
 const keyspace: Keyspace = { project: 'canary-app' as Project, env: 'dev' as Env };
@@ -70,5 +70,39 @@ describe('resolveGet', () => {
   it.each(['', 0, false, undefined])('preserves a present falsy entry %#', (value) => {
     expect(resolveGet<unknown>(value, 'canary-agent')).toEqual({ scope: 'shared', value });
     expect(resolveGet<unknown>(null, value)).toEqual({ scope: 'agent', value });
+  });
+});
+
+describe('listView', () => {
+  it('returns an empty list for no entries', () => {
+    expect(listView([])).toEqual([]);
+  });
+
+  it('projects names and scopes, sorting names and shared before agent without mutating input', () => {
+    const entries = Object.freeze([
+      Object.freeze({
+        name: 'canary-z' as Name,
+        scope: 'agent' as const,
+        version: 3,
+        value: 'canary-hidden',
+      }),
+      Object.freeze({ name: 'canary-a' as Name, scope: 'agent' as const, version: 2 }),
+      Object.freeze({
+        name: 'canary-a' as Name,
+        scope: 'shared' as const,
+        version: 1,
+        value: 'canary-hidden',
+      }),
+      Object.freeze({ name: 'canary-z' as Name, scope: 'agent' as const, version: 4 }),
+      Object.freeze({ name: 'canary-z' as Name, scope: 'shared' as const, version: 5 }),
+    ]);
+    expect(listView(entries)).toEqual([
+      { name: 'canary-a', scope: 'shared' },
+      { name: 'canary-a', scope: 'agent' },
+      { name: 'canary-z', scope: 'shared' },
+      { name: 'canary-z', scope: 'agent' },
+      { name: 'canary-z', scope: 'agent' },
+    ]);
+    expect(entries[0]?.name).toBe('canary-z');
   });
 });

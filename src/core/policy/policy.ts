@@ -1,4 +1,5 @@
 import type { Keyspace, Scope } from '../names/keyspace.js';
+import type { Name } from '../names/names.js';
 
 export type Actor = 'agent' | 'operator';
 export type Operation = 'list' | 'get' | 'set' | 'promote' | 'delete';
@@ -42,4 +43,17 @@ export function resolveGet<V>(
   if (shared !== null) return { scope: 'shared', value: shared };
   if (agent !== null) return { scope: 'agent', value: agent };
   return null;
+}
+
+export function listView(
+  entries: ReadonlyArray<{ scope: Scope; name: Name; version: number; value?: unknown }>,
+): Array<{ name: string; scope: Scope }> {
+  return entries
+    .map(({ name, scope }) => ({ name, scope }))
+    .sort((a, b) => {
+      if (a.name < b.name) return -1;
+      if (a.name > b.name) return 1;
+      if (a.scope === b.scope) return 0;
+      return a.scope === 'shared' ? -1 : 1;
+    });
 }
