@@ -85,3 +85,25 @@ it.each([
   Object.setPrototypeOf(input, { [field]: request[field] });
   expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason });
 });
+
+it.each([
+  ['v', 'BAD_VERSION'],
+  ['auth', 'MISSING_AUTH'],
+  ['op', 'BAD_OP'],
+  ['name', 'MISSING_NAME'],
+  ['value', 'MISSING_VALUE'],
+])('rejects non-enumerable required request field %s', (field, reason) => {
+  const input = { v: 1, auth: 'x', op: 'set', name: 'canary-name', value: 'canary-value' };
+  Object.defineProperty(input, field, { enumerable: false });
+  expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason });
+});
+
+it('rejects optional prefixes that would disappear during JSON encoding', () => {
+  const inherited = { v: 1, auth: 'x', op: 'list' };
+  Object.setPrototypeOf(inherited, { prefix: 'canary-prefix' });
+  const hidden = { v: 1, auth: 'x', op: 'list', prefix: 'canary-prefix' };
+  Object.defineProperty(hidden, 'prefix', { enumerable: false });
+  for (const input of [inherited, hidden]) {
+    expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason: 'UNKNOWN_FIELD' });
+  }
+});

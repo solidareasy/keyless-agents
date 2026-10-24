@@ -18,17 +18,21 @@ function invalid(reason: RequestReason): RequestResult {
   return { ok: false, code: 'INVALID', reason };
 }
 
+function hasEnumerableOwn(target: object, key: string): boolean {
+  return Object.prototype.propertyIsEnumerable.call(target, key);
+}
+
 export function validateRequest(input: unknown): RequestResult {
   try {
     if (typeof input !== 'object' || input === null) return invalid('NOT_OBJECT');
     if ('project' in input || 'env' in input) return invalid('FOREIGN_KEYSPACE_FIELD');
     if (Array.isArray(input)) return invalid('NOT_OBJECT');
     const data = input as Record<string, unknown>;
-    if (!Object.hasOwn(data, 'v') || data.v !== 1) return invalid('BAD_VERSION');
-    if (!Object.hasOwn(data, 'auth') || data.auth === '') return invalid('MISSING_AUTH');
+    if (!hasEnumerableOwn(data, 'v') || data.v !== 1) return invalid('BAD_VERSION');
+    if (!hasEnumerableOwn(data, 'auth') || data.auth === '') return invalid('MISSING_AUTH');
     if (typeof data.auth !== 'string') return invalid('BAD_TYPE');
     if (
-      !Object.hasOwn(data, 'op') ||
+      !hasEnumerableOwn(data, 'op') ||
       (data.op !== 'list' && data.op !== 'get' && data.op !== 'set')
     )
       return invalid('BAD_OP');
@@ -40,12 +44,15 @@ export function validateRequest(input: unknown): RequestResult {
       return invalid('UNKNOWN_FIELD');
     }
     if (data.op === 'list') {
-      if ('prefix' in data && typeof data.prefix !== 'string') return invalid('BAD_TYPE');
+      if ('prefix' in data) {
+        if (!hasEnumerableOwn(data, 'prefix')) return invalid('UNKNOWN_FIELD');
+        if (typeof data.prefix !== 'string') return invalid('BAD_TYPE');
+      }
     } else {
-      if (!Object.hasOwn(data, 'name')) return invalid('MISSING_NAME');
+      if (!hasEnumerableOwn(data, 'name')) return invalid('MISSING_NAME');
       if (typeof data.name !== 'string') return invalid('BAD_TYPE');
       if (data.op === 'set') {
-        if (!Object.hasOwn(data, 'value')) return invalid('MISSING_VALUE');
+        if (!hasEnumerableOwn(data, 'value')) return invalid('MISSING_VALUE');
         if (typeof data.value !== 'string') return invalid('BAD_TYPE');
       }
     }
