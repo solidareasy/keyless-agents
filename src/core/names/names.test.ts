@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { ENV_RE, NAME_RE, PROJECT_RE, validateEnv, validateName, validateProject } from './names.js';
 
@@ -27,7 +28,6 @@ describe('validateName', () => {
     ['*', 'INVALID_CHAR'],
     [' ', 'INVALID_CHAR'],
     [' canary-name ', 'INVALID_CHAR'],
-    ['a\n', 'INVALID_CHAR'],
     ['a\r', 'INVALID_CHAR'],
     ['a\t', 'INVALID_CHAR'],
     ['а', 'INVALID_CHAR'],
@@ -40,6 +40,10 @@ describe('validateName', () => {
     ['ssm', 'RESERVED_PREFIX'],
   ])('rejects invalid input %# with its specific code', (input, code) => {
     expect(validateName(input)).toEqual({ ok: false, code });
+  });
+
+  it('rejects a final newline instead of accepting a partial regex match', () => {
+    expect(validateName('canary-name\n')).toEqual({ ok: false, code: 'INVALID_CHAR' });
   });
 });
 
@@ -66,6 +70,99 @@ describe('validateProject', () => {
     ['a_b', 'INVALID_CHAR'],
   ])('rejects an invalid project %# with its specific code', (input, code) => {
     expect(validateProject(input)).toEqual({ ok: false, code });
+  });
+});
+
+const nameCharacter = fc.constantFrom(
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-',
+);
+const nameText = fc.array(nameCharacter, { minLength: 1, maxLength: 128 }).map((s) => s.join(''));
+
+describe('name properties', () => {
+  it('accepts the independent allowed alphabet without changing the input', () => {
+    fc.assert(
+      fc.property(
+        nameText.filter((name) => name !== '.' && name !== '..' && !/^(aws|ssm)/i.test(name)),
+        (name) => {
+          expect(NAME_RE.test(name)).toBe(true);
+          expect(validateName(name)).toEqual({ ok: true, name });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects slash, wildcard, spaces, controls, unicode and homoglyphs', () => {
+    const invalidCharacter = fc.oneof(
+      fc.constantFrom('/', '*', ' ', '\u0000', '\n', '\r', '\t', 'а', 'é', '\u0301'),
+      fc.integer({ min: 128, max: 0x10ffff }).map((code) => String.fromCodePoint(code)),
+    );
+    fc.assert(
+      fc.property(
+        fc.array(nameCharacter, { maxLength: 60 }),
+        invalidCharacter,
+        (characters, invalid) => {
+          expect(validateName(`canary-${characters.join('')}${invalid}`)).toEqual({
+            ok: false,
+            code: 'INVALID_CHAR',
+          });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects empty strings and whole dot segments with distinct codes', () => {
+    fc.assert(
+      fc.property(fc.constantFrom('', '.', '..'), (input) => {
+        expect(validateName(input)).toEqual({
+          ok: false,
+          code: input === '' ? 'EMPTY' : 'DOT_SEGMENT',
+        });
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects oversized names in both the regex and validator', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 129, max: 512 }).map((length) => 'a'.repeat(length)),
+        (input) => {
+          expect(NAME_RE.test(input)).toBe(false);
+          expect(validateName(input)).toEqual({ ok: false, code: 'TOO_LONG' });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects reserved prefixes regardless of letter case', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('aws', 'AWS', 'AwS', 'ssm', 'SSM', 'SsM'),
+        fc.array(nameCharacter, { maxLength: 125 }),
+        (prefix, suffix) => {
+          expect(validateName(prefix + suffix.join(''))).toEqual({
+            ok: false,
+            code: 'RESERVED_PREFIX',
+          });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects all generated non-string inputs', () => {
+    fc.assert(
+      fc.property(
+        fc.anything().filter((input) => typeof input !== 'string'),
+        (input) => {
+          expect(validateName(input)).toEqual({ ok: false, code: 'NOT_A_STRING' });
+        },
+      ),
+      { numRuns: 500 },
+    );
   });
 });
 
