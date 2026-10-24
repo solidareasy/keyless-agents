@@ -19,7 +19,8 @@ function invalid(reason: RequestReason): RequestResult {
 }
 
 function hasEnumerableOwn(target: object, key: string): boolean {
-  return Object.prototype.propertyIsEnumerable.call(target, key);
+  const descriptor = Object.getOwnPropertyDescriptor(target, key);
+  return descriptor?.enumerable === true && 'value' in descriptor;
 }
 
 export function validateRequest(input: unknown): RequestResult {
@@ -28,6 +29,11 @@ export function validateRequest(input: unknown): RequestResult {
     if ('project' in input || 'env' in input) return invalid('FOREIGN_KEYSPACE_FIELD');
     if (Array.isArray(input)) return invalid('NOT_OBJECT');
     const data = input as Record<string, unknown>;
+    if (
+      Object.values(Object.getOwnPropertyDescriptors(data)).some((field) => !('value' in field))
+    ) {
+      return invalid('BAD_TYPE');
+    }
     if (!hasEnumerableOwn(data, 'v') || data.v !== 1) return invalid('BAD_VERSION');
     if (!hasEnumerableOwn(data, 'auth') || data.auth === '') return invalid('MISSING_AUTH');
     if (typeof data.auth !== 'string') return invalid('BAD_TYPE');
@@ -85,16 +91,18 @@ function isResponse(input: unknown): input is OkResponse | ErrorResponse {
   }
   if (data.ok !== true) return false;
   if ('names' in data) {
-    return (
-      hasShape(data, ['v', 'ok', 'names']) &&
-      Array.isArray(data.names) &&
-      Array.from(data.names).every(
-        (item: unknown) =>
-          hasShape(item, ['name', 'scope']) &&
-          typeof item.name === 'string' &&
-          (item.scope === 'shared' || item.scope === 'agent'),
+    if (!hasShape(data, ['v', 'ok', 'names']) || !Array.isArray(data.names)) return false;
+    for (let index = 0; index < data.names.length; index++) {
+      if (!hasEnumerableOwn(data.names, String(index))) return false;
+      const item: unknown = data.names[index];
+      if (
+        !hasShape(item, ['name', 'scope']) ||
+        typeof item.name !== 'string' ||
+        (item.scope !== 'shared' && item.scope !== 'agent')
       )
-    );
+        return false;
+    }
+    return true;
   }
   const get = 'value' in data;
   return (

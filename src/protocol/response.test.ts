@@ -82,3 +82,57 @@ it('never throws for arbitrary response input', () => {
     { numRuns: 300 },
   );
 });
+
+it('rejects response accessors that can change after validation', () => {
+  let value: unknown = 'canary-value';
+  const input = {
+    v: 1,
+    ok: true,
+    version: 3,
+    scope: 'agent',
+    get value() {
+      return value;
+    },
+  };
+  const result = validateResponse(input);
+  value = null;
+  expect(result).toEqual({ ok: false, reason: 'INVALID_RESPONSE' });
+});
+
+it('checks indexed list entries even when a custom iterator yields nothing', () => {
+  const names = [{ name: 1, scope: 'agent' }];
+  Object.defineProperty(names, Symbol.iterator, { value: () => [][Symbol.iterator]() });
+  expect(validateResponse({ v: 1, ok: true, names })).toEqual({
+    ok: false,
+    reason: 'INVALID_RESPONSE',
+  });
+});
+
+it('rejects sparse names arrays', () => {
+  expect(validateResponse({ v: 1, ok: true, names: new Array<unknown>(1) })).toEqual({
+    ok: false,
+    reason: 'INVALID_RESPONSE',
+  });
+});
+
+it('rejects accessor entries and accessor fields in list responses', () => {
+  const indexed: unknown[] = [];
+  Object.defineProperty(indexed, '0', {
+    enumerable: true,
+    get: () => ({ name: '', scope: 'agent' }),
+  });
+  const nested = [
+    {
+      get name() {
+        return '';
+      },
+      scope: 'agent',
+    },
+  ];
+  for (const names of [indexed, nested]) {
+    expect(validateResponse({ v: 1, ok: true, names })).toEqual({
+      ok: false,
+      reason: 'INVALID_RESPONSE',
+    });
+  }
+});

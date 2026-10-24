@@ -107,3 +107,17 @@ it('rejects optional prefixes that would disappear during JSON encoding', () => 
     expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason: 'UNKNOWN_FIELD' });
   }
 });
+
+it('rejects accessors whose operation can change after validation', () => {
+  let op = 'list';
+  const input = {
+    v: 1,
+    auth: 'x',
+    get op() {
+      return op;
+    },
+  };
+  const result = validateRequest(input);
+  op = 'set';
+  expect(result).toEqual({ ok: false, code: 'INVALID', reason: 'BAD_TYPE' });
+});
