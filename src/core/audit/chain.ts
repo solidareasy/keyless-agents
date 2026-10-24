@@ -51,10 +51,8 @@ function hasShape(input: unknown): input is AuditEntry {
     (entry.version === null || typeof entry.version === 'number') &&
     typeof entry.decision === 'string' &&
     typeof entry.prevHash === 'string' &&
-    entry.prevHash.length === 64 &&
     /^[a-f0-9]{64}$/.test(entry.prevHash) &&
     typeof entry.hash === 'string' &&
-    entry.hash.length === 64 &&
     /^[a-f0-9]{64}$/.test(entry.hash)
   );
 }
