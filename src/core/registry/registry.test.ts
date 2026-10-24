@@ -187,3 +187,10 @@ it('sanitizes save, random and clock failures', () => {
     new Registry(store, fail, () => canary).add('canary-sandbox', 'canary-project', 'dev'),
   );
 });
+
+it('keeps the plaintext canary out of persisted JSON independently of lookup', () => {
+  registry.add('canary-sandbox', 'canary-project', 'dev');
+  expect(JSON.stringify(store.load())).not.toContain(canary);
+  expect(JSON.stringify(registry.list())).not.toContain(canary);
+  expect(store.load()[0]?.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+});
