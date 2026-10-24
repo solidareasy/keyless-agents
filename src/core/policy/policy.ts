@@ -1,4 +1,4 @@
-import type { Keyspace } from '../names/keyspace.js';
+import type { Keyspace, Scope } from '../names/keyspace.js';
 
 export type Actor = 'agent' | 'operator';
 export type Operation = 'list' | 'get' | 'set' | 'promote' | 'delete';
@@ -33,4 +33,13 @@ export function decide(req: PolicyRequest, cfg: PolicyConfig): Decision {
     case 'delete':
       return { kind: 'deny', code: 'DENIED', audit: 'deny' };
   }
+}
+
+export function resolveGet<V>(
+  shared: V | null,
+  agent: V | null,
+): { scope: Scope; value: V } | null {
+  if (shared !== null) return { scope: 'shared', value: shared };
+  if (agent !== null) return { scope: 'agent', value: agent };
+  return null;
 }

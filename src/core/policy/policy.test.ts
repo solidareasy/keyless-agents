@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Keyspace } from '../names/keyspace.js';
 import type { Env, Project } from '../names/names.js';
-import { decide } from './policy.js';
+import { decide, resolveGet } from './policy.js';
 import type { Actor, Decision, Operation, PolicyConfig, Subject } from './policy.js';
 
 const keyspace: Keyspace = { project: 'canary-app' as Project, env: 'dev' as Env };
@@ -54,5 +54,21 @@ describe('decide', () => {
     expect(
       decide({ subject: null, op: 'list', hasForeignKeyspaceFields: false }, { get: 'value' }),
     ).toEqual({ kind: 'deny', code: 'DENIED', audit: 'alert' });
+  });
+});
+
+describe('resolveGet', () => {
+  it.each([
+    [null, null, null],
+    ['canary-shared', null, { scope: 'shared', value: 'canary-shared' }],
+    [null, 'canary-agent', { scope: 'agent', value: 'canary-agent' }],
+    ['canary-shared', 'canary-agent', { scope: 'shared', value: 'canary-shared' }],
+  ])('resolves presence combination %#', (shared, agent, expected) => {
+    expect(resolveGet(shared, agent)).toEqual(expected);
+  });
+
+  it.each(['', 0, false, undefined])('preserves a present falsy entry %#', (value) => {
+    expect(resolveGet<unknown>(value, 'canary-agent')).toEqual({ scope: 'shared', value });
+    expect(resolveGet<unknown>(null, value)).toEqual({ scope: 'agent', value });
   });
 });
