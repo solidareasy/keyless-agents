@@ -67,6 +67,7 @@ it.each([0o644, 0o640, 0o660, 0o700])(
   'rejects permissive existing files without repairing them %#',
   (mode) => {
     writeFileSync(path, '[]', { mode });
+    chmodSync(path, mode);
     expect(() => new FileRegistryStore(path)).toThrow(
       'Registry file permissions must be 0600 or stricter',
     );
