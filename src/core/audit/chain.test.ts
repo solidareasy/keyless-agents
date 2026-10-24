@@ -138,3 +138,20 @@ describe('audit chain', () => {
     expect(invalid).toBeDefined();
   });
 });
+
+it('rejects a missing required key even when an extra key preserves the key count', () => {
+  expect(
+    verifyChain([
+      JSON.stringify({
+        sandboxId: 'canary-sandbox',
+        op: 'get',
+        name: null,
+        version: null,
+        decision: 'allow',
+        prevHash: GENESIS_HASH,
+        hash: vector,
+        extra: 'canary-extra',
+      }),
+    ]),
+  ).toEqual({ ok: false, line: 1, reason: 'SHAPE' });
+});

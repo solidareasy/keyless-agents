@@ -71,3 +71,22 @@ it('verifies current storage rather than a cached verification result', () => {
   lines.push('{');
   expect(log.verify()).toEqual({ ok: false, line: 2, reason: 'PARSE' });
 });
+
+it('records only the eight audit keys from a request with a canary value', () => {
+  const target = sink();
+  const log = new AuditLog(target);
+  const request = { ...fields, op: 'set' as const, value: 'canary-value-request' };
+  log.record(request);
+  const line = target.readAll()[0]!;
+  expect(line).not.toContain(request.value);
+  expect(Object.keys(JSON.parse(line) as object)).toEqual([
+    'ts',
+    'sandboxId',
+    'op',
+    'name',
+    'version',
+    'decision',
+    'prevHash',
+    'hash',
+  ]);
+});
