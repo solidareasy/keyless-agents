@@ -48,21 +48,29 @@ it('refuses recording when constructed with a corrupt chain', () => {
   expect(target.readAll()).toEqual(['{']);
 });
 
-it('keeps the previous hash when the sink fails before appending', () => {
-  const target = sink();
-  let fail = true;
-  const log = new AuditLog({
-    readAll: () => target.readAll(),
-    append: (line) => {
-      if (fail) throw new Error('Canary write failure');
-      target.append(line);
-    },
-  });
-  expect(() => log.record(fields)).toThrow('Canary write failure');
-  fail = false;
-  const hash = log.record(fields);
-  expect(log.verify()).toEqual({ ok: true, count: 1, lastHash: hash });
-});
+it.each([false, true])(
+  'latches a failed append and refuses subsequent writes (partial=%s)',
+  (partial) => {
+    const target = sink();
+    const failure = new Error('Canary write failure');
+    const log = new AuditLog({
+      readAll: () => target.readAll(),
+      append: (line) => {
+        if (partial) target.append(line.slice(0, 10));
+        throw failure;
+      },
+    });
+    expect(() => log.record(fields)).toThrow(failure);
+    const persisted = target.readAll();
+    expect(() => log.record(fields)).toThrow(AuditChainBroken);
+    expect(target.readAll()).toEqual(persisted);
+    expect(log.verify()).toEqual(
+      partial
+        ? { ok: false, line: 1, reason: 'PARSE' }
+        : { ok: true, count: 0, lastHash: GENESIS_HASH },
+    );
+  },
+);
 
 it('verifies current storage rather than a cached verification result', () => {
   const lines: string[] = [];

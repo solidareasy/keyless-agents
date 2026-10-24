@@ -15,7 +15,7 @@ export class AuditChainBroken extends Error {
 
 export class AuditLog {
   private lastHash: string;
-  private readonly broken: boolean;
+  private broken: boolean;
 
   constructor(private readonly sink: AuditSink) {
     const result = this.verify();
@@ -26,7 +26,12 @@ export class AuditLog {
   record(fields: AuditFields): string {
     if (this.broken) throw new AuditChainBroken();
     const entry = appendEntry(this.lastHash, fields);
-    this.sink.append(entry.line);
+    try {
+      this.sink.append(entry.line);
+    } catch (error) {
+      this.broken = true;
+      throw error;
+    }
     this.lastHash = entry.hash;
     return entry.hash;
   }
