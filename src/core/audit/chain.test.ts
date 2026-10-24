@@ -155,3 +155,13 @@ it('rejects a missing required key even when an extra key preserves the key coun
     ]),
   ).toEqual({ ok: false, line: 1, reason: 'SHAPE' });
 });
+
+it.each(['prevHash', 'hash'])(
+  'rejects a newline suffix on the %s digest as malformed shape',
+  (key) => {
+    const entry = { ...fields, prevHash: GENESIS_HASH, hash: vector };
+    expect(
+      verifyChain([JSON.stringify({ ...entry, [key]: entry[key as 'prevHash' | 'hash'] + '\n' })]),
+    ).toEqual({ ok: false, line: 1, reason: 'SHAPE' });
+  },
+);
