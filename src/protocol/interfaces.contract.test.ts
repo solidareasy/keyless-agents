@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, expectTypeOf, it } from 'vitest';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import type { ErrorCode } from './messages.js';
-import { validateRequest } from './validate.js';
+import { validateRequest, validateResponse } from './validate.js';
 
 const tracked = execFileSync('git', ['ls-files', '-z', '--', 'INTERFACES.md'], { encoding: 'utf8' })
   .split('\0')
@@ -23,6 +23,10 @@ it('keeps the exact documented protocol error set at runtime and in types', () =
   expect(documented).toBeDefined();
   expect(documented).toHaveLength(codes.length);
   expect(new Set(documented)).toEqual(new Set(codes));
+  for (const code of documented ?? []) {
+    const response = { v: 1, ok: false, code };
+    expect(validateResponse(response)).toEqual({ ok: true, response });
+  }
   expectTypeOf<ErrorCode>().toEqualTypeOf<(typeof codes)[number]>();
 });
 

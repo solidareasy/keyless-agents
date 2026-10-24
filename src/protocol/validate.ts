@@ -1,4 +1,4 @@
-import type { Request } from './messages.js';
+import type { ErrorResponse, OkResponse, Request } from './messages.js';
 
 export type RequestReason =
   | 'NOT_OBJECT'
@@ -60,4 +60,62 @@ export function validateRequest(input: unknown): RequestResult {
   } catch {
     return invalid('BAD_TYPE');
   }
+}
+
+function hasShape(input: unknown, fields: string[]): input is Record<string, unknown> {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    !Array.isArray(input) &&
+    Reflect.ownKeys(input).length === fields.length &&
+    fields.every((field) => hasEnumerableOwn(input, field))
+  );
+}
+
+function isResponse(input: unknown): input is OkResponse | ErrorResponse {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return false;
+  const data = input as Record<string, unknown>;
+  if (data.v !== 1) return false;
+  if (data.ok === false) {
+    return (
+      hasShape(data, ['v', 'ok', 'code']) &&
+      typeof data.code === 'string' &&
+      ['INVALID', 'NOT_FOUND', 'DENIED', 'RATE_LIMITED', 'UNAVAILABLE'].includes(data.code)
+    );
+  }
+  if (data.ok !== true) return false;
+  if ('names' in data) {
+    return (
+      hasShape(data, ['v', 'ok', 'names']) &&
+      Array.isArray(data.names) &&
+      Array.from(data.names).every(
+        (item: unknown) =>
+          hasShape(item, ['name', 'scope']) &&
+          typeof item.name === 'string' &&
+          (item.scope === 'shared' || item.scope === 'agent'),
+      )
+    );
+  }
+  const get = 'value' in data;
+  return (
+    hasShape(
+      data,
+      get ? ['v', 'ok', 'value', 'version', 'scope'] : ['v', 'ok', 'version', 'scope'],
+    ) &&
+    typeof data.version === 'number' &&
+    Number.isFinite(data.version) &&
+    (data.scope === 'agent' || (get && data.scope === 'shared')) &&
+    (!get || typeof data.value === 'string')
+  );
+}
+
+export function validateResponse(
+  input: unknown,
+): { ok: true; response: OkResponse | ErrorResponse } | { ok: false; reason: string } {
+  try {
+    if (isResponse(input)) return { ok: true, response: input };
+  } catch {
+    return { ok: false, reason: 'INVALID_RESPONSE' };
+  }
+  return { ok: false, reason: 'INVALID_RESPONSE' };
 }
