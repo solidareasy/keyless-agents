@@ -1,6 +1,13 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { ENV_RE, NAME_RE, PROJECT_RE, validateEnv, validateName, validateProject } from './names.js';
+import {
+  ENV_RE,
+  NAME_RE,
+  PROJECT_RE,
+  validateEnv,
+  validateName,
+  validateProject,
+} from './names.js';
 
 describe('validateName', () => {
   it('exports the exact interface regex', () => {

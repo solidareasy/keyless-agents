@@ -4,12 +4,7 @@ export const ENV_RE = /^[a-z][a-z0-9-]{1,15}$/;
 
 export type Name = string & { readonly __brand: 'Name' };
 export type NameErrorCode =
-  | 'NOT_A_STRING'
-  | 'EMPTY'
-  | 'TOO_LONG'
-  | 'DOT_SEGMENT'
-  | 'INVALID_CHAR'
-  | 'RESERVED_PREFIX';
+  'NOT_A_STRING' | 'EMPTY' | 'TOO_LONG' | 'DOT_SEGMENT' | 'INVALID_CHAR' | 'RESERVED_PREFIX';
 
 export function validateName(
   input: unknown,

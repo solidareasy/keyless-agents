@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { keyspacePrefix, parameterPath, parseParameterPath } from './keyspace.js';
 import type { Keyspace } from './keyspace.js';
@@ -72,5 +73,119 @@ describe('keyspace paths', () => {
     `/app/dev/${'a'.repeat(129)}`,
   ])('rejects an invalid name %#', (path) => {
     expect(parseParameterPath(ks, path)).toEqual({ ok: false, code: 'BAD_NAME' });
+  });
+});
+
+const segment = (maxLength: number) =>
+  fc
+    .tuple(
+      fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz'),
+      fc.array(fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789-'), {
+        minLength: 1,
+        maxLength: maxLength - 1,
+      }),
+    )
+    .map(([first, rest]) => first + rest.join(''));
+const project = segment(32).map((input) => input as Project);
+const env = segment(16)
+  .filter((input) => input !== 'prod')
+  .map((input) => input as Env);
+const keyspace = fc.record({ project, env });
+const scope = fc.constantFrom('shared' as const, 'agent' as const);
+const name = fc
+  .array(fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-'), {
+    minLength: 1,
+    maxLength: 128,
+  })
+  .map((characters) => characters.join(''))
+  .filter((input) => input !== '.' && input !== '..' && !/^(aws|ssm)/i.test(input))
+  .map((input) => input as Name);
+
+describe('keyspace properties', () => {
+  it('round-trips names in both scopes except the reserved shared agent path', () => {
+    fc.assert(
+      fc.property(keyspace, scope, name, (ks, scope, name) => {
+        // EXT-774 advisor decision: /project/env/agent fails closed with BAD_DEPTH.
+        fc.pre(scope !== 'shared' || name !== 'agent');
+        expect(parseParameterPath(ks, parameterPath(ks, scope, name))).toEqual({
+          ok: true,
+          scope,
+          name,
+        });
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects paths from any distinct generated project', () => {
+    fc.assert(
+      fc.property(
+        fc.tuple(project, project).filter(([first, second]) => first !== second),
+        env,
+        scope,
+        name,
+        ([first, second], env, scope, name) => {
+          expect(
+            parseParameterPath(
+              { project: first, env },
+              parameterPath({ project: second, env }, scope, name),
+            ),
+          ).toEqual({ ok: false, code: 'OUTSIDE_KEYSPACE' });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('isolates projects even when either is a prefix of the other', () => {
+    fc.assert(
+      fc.property(segment(28), env, scope, name, (input, env, scope, name) => {
+        const first = { project: input as Project, env };
+        const second = { project: `${input}-two` as Project, env };
+        expect(parseParameterPath(first, parameterPath(second, scope, name))).toEqual({
+          ok: false,
+          code: 'OUTSIDE_KEYSPACE',
+        });
+        expect(parseParameterPath(second, parameterPath(first, scope, name))).toEqual({
+          ok: false,
+          code: 'OUTSIDE_KEYSPACE',
+        });
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it('isolates distinct environments in the same project', () => {
+    fc.assert(
+      fc.property(
+        project,
+        fc.tuple(env, env).filter(([first, second]) => first !== second),
+        scope,
+        name,
+        (project, [first, second], scope, name) => {
+          expect(
+            parseParameterPath(
+              { project, env: first },
+              parameterPath({ project, env: second }, scope, name),
+            ),
+          ).toEqual({ ok: false, code: 'OUTSIDE_KEYSPACE' });
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  it('rejects every generated depth of 16 or more segments', () => {
+    fc.assert(
+      fc.property(keyspace, fc.integer({ min: 16, max: 64 }), (ks, depth) => {
+        const path =
+          keyspacePrefix(ks) +
+          Array<string>(depth - 2)
+            .fill('a')
+            .join('/');
+        expect(parseParameterPath(ks, path)).toEqual({ ok: false, code: 'BAD_DEPTH' });
+      }),
+      { numRuns: 500 },
+    );
   });
 });
