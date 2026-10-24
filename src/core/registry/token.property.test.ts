@@ -16,7 +16,8 @@ it('rejects a single changed token character and unequal hash lengths', () => {
   fc.assert(
     fc.property(fc.integer({ min: 5, max: 47 }), (index) => {
       const token = generateToken();
-      const changed = token.slice(0, index) + (token[index] === 'a' ? 'b' : 'a') + token.slice(index + 1);
+      const changed =
+        token.slice(0, index) + (token[index] === 'a' ? 'b' : 'a') + token.slice(index + 1);
       const hash = hashToken(token);
       expect(tokensEqual(hash, hashToken(changed))).toBe(false);
       expect(tokensEqual(hash, hash.slice(2))).toBe(false);
