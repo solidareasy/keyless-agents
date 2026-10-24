@@ -24,10 +24,14 @@ export function validateRequest(input: unknown): RequestResult {
     if ('project' in input || 'env' in input) return invalid('FOREIGN_KEYSPACE_FIELD');
     if (Array.isArray(input)) return invalid('NOT_OBJECT');
     const data = input as Record<string, unknown>;
-    if (data.v !== 1) return invalid('BAD_VERSION');
-    if (!('auth' in data) || data.auth === '') return invalid('MISSING_AUTH');
+    if (!Object.hasOwn(data, 'v') || data.v !== 1) return invalid('BAD_VERSION');
+    if (!Object.hasOwn(data, 'auth') || data.auth === '') return invalid('MISSING_AUTH');
     if (typeof data.auth !== 'string') return invalid('BAD_TYPE');
-    if (data.op !== 'list' && data.op !== 'get' && data.op !== 'set') return invalid('BAD_OP');
+    if (
+      !Object.hasOwn(data, 'op') ||
+      (data.op !== 'list' && data.op !== 'get' && data.op !== 'set')
+    )
+      return invalid('BAD_OP');
     const fields = ['v', 'auth', 'op'];
     if (data.op === 'list') fields.push('prefix');
     else fields.push('name');
@@ -38,10 +42,10 @@ export function validateRequest(input: unknown): RequestResult {
     if (data.op === 'list') {
       if ('prefix' in data && typeof data.prefix !== 'string') return invalid('BAD_TYPE');
     } else {
-      if (!('name' in data)) return invalid('MISSING_NAME');
+      if (!Object.hasOwn(data, 'name')) return invalid('MISSING_NAME');
       if (typeof data.name !== 'string') return invalid('BAD_TYPE');
       if (data.op === 'set') {
-        if (!('value' in data)) return invalid('MISSING_VALUE');
+        if (!Object.hasOwn(data, 'value')) return invalid('MISSING_VALUE');
         if (typeof data.value !== 'string') return invalid('BAD_TYPE');
       }
     }

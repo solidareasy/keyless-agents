@@ -65,3 +65,23 @@ describe('request validation', () => {
     expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason: 'BAD_TYPE' });
   });
 });
+
+it.each([
+  ['v', 'BAD_VERSION'],
+  ['auth', 'MISSING_AUTH'],
+  ['op', 'BAD_OP'],
+  ['name', 'MISSING_NAME'],
+  ['value', 'MISSING_VALUE'],
+])('rejects inherited required request field %s', (field, reason) => {
+  const request: Record<string, unknown> = {
+    v: 1,
+    auth: 'x',
+    op: 'set',
+    name: 'canary-name',
+    value: 'canary-value',
+  };
+  const input = { ...request };
+  delete input[field];
+  Object.setPrototypeOf(input, { [field]: request[field] });
+  expect(validateRequest(input)).toEqual({ ok: false, code: 'INVALID', reason });
+});
