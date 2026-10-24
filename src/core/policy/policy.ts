@@ -1,4 +1,5 @@
 import type { Keyspace, Scope } from '../names/keyspace.js';
+import { parameterPath } from '../names/keyspace.js';
 import type { Name } from '../names/names.js';
 
 export type Actor = 'agent' | 'operator';
@@ -56,4 +57,8 @@ export function listView(
       if (a.scope === b.scope) return 0;
       return a.scope === 'shared' ? -1 : 1;
     });
+}
+
+export function writePath(subject: Subject, name: Name, scope: Scope = 'shared'): string {
+  return parameterPath(subject.keyspace, subject.kind === 'agent' ? 'agent' : scope, name);
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Keyspace } from '../names/keyspace.js';
 import type { Env, Name, Project } from '../names/names.js';
-import { decide, listView, resolveGet } from './policy.js';
+import { decide, listView, resolveGet, writePath } from './policy.js';
 import type { Actor, Decision, Operation, PolicyConfig, Subject } from './policy.js';
 
 const keyspace: Keyspace = { project: 'canary-app' as Project, env: 'dev' as Env };
@@ -104,5 +104,26 @@ describe('listView', () => {
       { name: 'canary-z', scope: 'agent' },
     ]);
     expect(entries[0]?.name).toBe('canary-z');
+  });
+});
+
+describe('writePath', () => {
+  const name = 'canary-name' as Name;
+
+  it('forces agent scope when an agent explicitly requests shared', () => {
+    expect(writePath(agent, name, 'shared')).toBe('/canary-app/dev/agent/canary-name');
+  });
+
+  it('defaults agents to agent scope', () => {
+    expect(writePath(agent, name)).toBe('/canary-app/dev/agent/canary-name');
+  });
+
+  it('defaults operators to shared scope', () => {
+    expect(writePath(operator, name)).toBe('/canary-app/dev/canary-name');
+  });
+
+  it('uses the scope requested by an operator', () => {
+    expect(writePath(operator, name, 'agent')).toBe('/canary-app/dev/agent/canary-name');
+    expect(writePath(operator, name, 'shared')).toBe('/canary-app/dev/canary-name');
   });
 });
