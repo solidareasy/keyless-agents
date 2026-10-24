@@ -19,7 +19,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 it('loads the complete documented local configuration', () => {
   expect(loadConfig(exampleConfig)).toEqual({ ok: true, config: exampleConfig });
-  const { store: _store, ...productionShape } = exampleConfig;
+  const productionShape: Partial<typeof exampleConfig> = { ...exampleConfig };
+  delete productionShape.store;
   expect(loadConfig(productionShape).ok).toBe(true);
 });
 
