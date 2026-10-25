@@ -1,8 +1,10 @@
 # Threat model
 
-This document implements the documentation requirement M15 and follows SPEC §2. The current scaffold
-contains a usage-only CLI and development quality gates. Runtime controls below are requirements for
-later implementation, not claims that the scaffold already enforces them.
+This document implements the documentation requirement M15 and follows SPEC §2. The current wave
+ships the agent CLI (`klag list`, `get`, `set`, `doctor`, `serve`), the daemon with the in-memory
+store, and development quality gates; the operator CLI (`klag op ...`) and the AWS adapter are not
+implemented yet. Runtime controls below are requirements, not claims that every one of them is
+already enforced; the agent CLI already handles sandbox tokens and secret values and is in scope.
 
 ## Actors and trust
 

@@ -3,7 +3,9 @@
 ## Supported versions
 
 Security fixes target `main`. This project is currently a scaffold; no released version is supported.
-The CLI currently prints usage only and is not ready to handle credentials.
+The agent CLI (`klag list`, `get`, `set`, `doctor`, `serve`) is implemented and handles sandbox
+tokens and secret values; reports about that surface are in scope. The operator CLI (`klag op ...`)
+is not implemented yet.
 
 ## Reporting a vulnerability
 

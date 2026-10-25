@@ -43,6 +43,12 @@ The publish job uses GitHub OIDC trusted publishing and the `npm-publish`
 environment. npm is pinned to 11.5.1, the minimum version required for trusted
 publishing.
 
+The dry run proves less than it looks. With npm 11.5.1, `npm publish --dry-run`
+can finish successfully without any credentials: npm only warns and skips the
+upload. A green publish job therefore does not prove that the trusted publisher
+is configured on npmjs, nor that publication with provenance will work. Only a
+real publish verifies either.
+
 Real publication requires the owner to configure the trusted publisher on npmjs
 for repository `solidareasy/keyless-agents`, workflow `cd.yml`, environment
 `npm-publish`, then remove `--dry-run` through a PR. If npm requires an existing
@@ -51,7 +57,9 @@ manually. Until then, the workflow runs only the dry run.
 
 ## Try it locally with the in-memory store
 
-Build with `pnpm build` and use `klag` from the built `dist/cli/main.js` entrypoint.
+Build with `pnpm build` and run the CLI through the built entrypoint,
+`node dist/cli/main.js`. After `pnpm install` and `pnpm build` alone, `klag` is not
+on your PATH; the binary only appears once the package is installed.
 Create a `local` directory and save this as `local/config.json`:
 
 ```json
@@ -90,9 +98,9 @@ local demonstration; the operator CLI is not implemented in this wave.
 Run the first command in one terminal, then the other two in another terminal:
 
 ```sh
-KLAG_CONFIG=./local/config.json klag serve
-printf '%s' 'canary-local-value' | KLAG_URL=http://127.0.0.1:7777 KLAG_AUTH=canary-local-auth klag set DEMO
-KLAG_URL=http://127.0.0.1:7777 KLAG_AUTH=canary-local-auth klag get DEMO
+KLAG_CONFIG=./local/config.json node dist/cli/main.js serve
+printf '%s' 'canary-local-value' | KLAG_URL=http://127.0.0.1:7777 KLAG_AUTH=canary-local-auth node dist/cli/main.js set DEMO
+KLAG_URL=http://127.0.0.1:7777 KLAG_AUTH=canary-local-auth node dist/cli/main.js get DEMO
 ```
 
 `set` prints nothing; `get` prints exactly `canary-local-value`. Values disappear

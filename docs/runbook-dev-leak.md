@@ -1,8 +1,10 @@
 # Suspected development secret leak
 
-The trusted operator performs these steps outside the affected sandbox. The current scaffold has a
-usage-only CLI: the operator commands below describe the required runtime interface and become
-available with its implementation. Do not rely on the scaffold for incident containment.
+The trusted operator performs these steps outside the affected sandbox. The agent CLI (`klag list`,
+`get`, `set`, `doctor`, `serve`) is implemented and handles sandbox tokens and secret values. The
+operator CLI (`klag op ...`) is not: the operator commands below describe the required runtime
+interface and become available with its implementation. Do not rely on the agent CLI for incident
+containment.
 
 1. **Contain and revoke.** Stop the affected agent and isolate its sandbox through the sandbox runtime.
    Run `klag op sandbox revoke <sandboxId>` from the operator host. Verify that the next sandbox request
