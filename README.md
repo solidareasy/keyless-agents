@@ -19,7 +19,7 @@ Status: draft v4. Design: [SPEC.md](SPEC.md). Requirements and tests: [REQUIREME
 
 ## Development
 
-Use Node 22+ and pnpm 10.28.0. The current CLI scaffold prints usage only.
+Use Node 22+ and pnpm 10.28.0.
 
 ```sh
 pnpm install
