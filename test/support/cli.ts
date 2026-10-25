@@ -5,14 +5,21 @@ export function buildCli(): void {
   execFileSync('mise', ['exec', 'node@22', '--', 'pnpm', 'build'], { stdio: 'pipe' });
 }
 
-export function cli(url: string, auth: string, args: string[], stdin = '', imports: string[] = []) {
+export function cli(
+  url: string,
+  auth: string,
+  args: string[],
+  stdin = '',
+  imports: string[] = [],
+  testEnv: Record<string, string> = {},
+) {
   return new Promise<{ code: number | null; stdout: string; stderr: string; errors: string[] }>(
     (resolveResult, reject) => {
       const child = spawn(
         process.execPath,
         [...imports.flatMap((path) => ['--import', path]), resolve('dist/cli/main.js'), ...args],
         {
-          env: { KLAG_URL: url, KLAG_AUTH: auth },
+          env: { KLAG_URL: url, KLAG_AUTH: auth, ...testEnv },
           stdio: ['pipe', 'pipe', 'pipe'],
         },
       );
