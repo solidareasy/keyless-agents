@@ -18,12 +18,7 @@ describe('daemon HTTP integration', { concurrent: false }, () => {
     f.rateLimiter.forget('canary-beta');
   });
   afterAll(async () => {
-    try {
-      expect(f.audit.verify()).toMatchObject({ ok: true, count: 26 });
-      expect(f.sink.readAll()).toHaveLength(26);
-    } finally {
-      await f.close();
-    }
+    await f.close();
   });
   const request = (op: string, fields = {}, auth?: string) =>
     post(f.url, { v: 1, auth: auth ?? f.alpha, op, ...fields });
@@ -158,5 +153,9 @@ describe('daemon HTTP integration', { concurrent: false }, () => {
       code: 'INVALID',
     });
     audit('deny', 'canary-alpha', null);
+  });
+  it('audit.verify succeeds with exactly 26 audit lines after all HTTP scenarios', () => {
+    expect(f.audit.verify()).toMatchObject({ ok: true, count: 26 });
+    expect(f.sink.readAll()).toHaveLength(26);
   });
 });
