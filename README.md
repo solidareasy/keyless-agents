@@ -28,8 +28,8 @@ pnpm check
 
 ## Tests
 
-`pnpm test` runs the unit, contract and integration tests with coverage. The
-default test discovery also includes the process e2e test. Build first with
+`pnpm test` runs the unit, contract and integration tests with coverage.
+The process e2e suite runs separately. Build first with
 `pnpm build`, then run `pnpm test:e2e` to run only the process e2e suite without
 coverage. It starts a real daemon with the in-memory store and invokes the built
 CLI over HTTP; it needs no AWS account, Docker or sandbox runtime.
@@ -37,7 +37,8 @@ CLI over HTTP; it needs no AWS account, Docker or sandbox runtime.
 ## Releasing
 
 A tag `vX.Y.Z` triggers `cd.yml`, which validates the package, checks that the tag
-matches `package.json`, and runs `npm publish --provenance --access public --dry-run`.
+matches `package.json`, and runs
+`npm publish --provenance --access public --dry-run --ignore-scripts`.
 The publish job uses GitHub OIDC trusted publishing and the `npm-publish`
 environment. npm is pinned to 11.5.1, the minimum version required for trusted
 publishing.
@@ -46,7 +47,7 @@ Real publication requires the owner to configure the trusted publisher on npmjs
 for repository `solidareasy/keyless-agents`, workflow `cd.yml`, environment
 `npm-publish`, then remove `--dry-run` through a PR. If npm requires an existing
 package to configure trusted publishing, the owner must publish the first version
-manually. This wave runs only the dry run.
+manually. Until then, the workflow runs only the dry run.
 
 ## Try it locally with the in-memory store
 
