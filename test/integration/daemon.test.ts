@@ -120,14 +120,21 @@ describe('daemon HTTP integration', { concurrent: false }, () => {
     expect((await post(f.url + '/?auth=canary', '{}')).status).toBe(400);
     expect(f.sink.readAll()).toHaveLength(before);
   });
-  it('a 65 KiB body is INVALID without entering the handler', async () => {
+  it('a 65 KiB value in valid JSON is INVALID without store writes or audit entries', async () => {
     const before = f.sink.readAll().length;
-    expect((await post(f.url, 'a'.repeat(65 * 1024))).body).toEqual({
-      v: 1,
-      ok: false,
-      code: 'INVALID',
-    });
-    expect(f.sink.readAll()).toHaveLength(before);
+    const put = vi.spyOn(f.store, 'put');
+    try {
+      expect(
+        await request('set', { name: 'OVERSIZED', value: 'a'.repeat(65 * 1024) }),
+      ).toMatchObject({
+        status: 400,
+        body: { v: 1, ok: false, code: 'INVALID' },
+      });
+      expect(put).not.toHaveBeenCalled();
+      expect(f.sink.readAll()).toHaveLength(before);
+    } finally {
+      put.mockRestore();
+    }
   });
   it('failNext UNAVAILABLE returns HTTP 503 and audits a sandbox deny', async () => {
     f.store.failNext('UNAVAILABLE');

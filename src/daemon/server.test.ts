@@ -120,10 +120,17 @@ it('rejects a query without waiting for a body', async () => {
 });
 
 it('rejects malformed JSON and oversized bodies including chunked bodies', async () => {
-  const handler = vi.fn<Handler>();
-  const { port } = await start(handler, 32);
+  const handler = vi.fn<Handler>().mockResolvedValue({ ...ok, body: { ...ok.body, names: [] } });
+  const { port } = await start(handler);
+  const body = JSON.stringify({
+    v: 1,
+    auth: 'canary-auth',
+    op: 'set',
+    name: 'OVERSIZED',
+    value: 'a'.repeat(65 * 1024),
+  });
   expect((await post(port, '{')).status).toBe(400);
-  expect((await post(port, 'a'.repeat(33))).status).toBe(400);
+  expect((await post(port, body)).status).toBe(400);
   await new Promise<void>((resolve, reject) => {
     const req = httpRequest(
       { host: '127.0.0.1', port, method: 'POST', headers: { 'content-type': 'application/json' } },
@@ -134,8 +141,8 @@ it('rejects malformed JSON and oversized bodies including chunked bodies', async
       },
     );
     req.on('error', reject);
-    req.write('a'.repeat(20));
-    req.end('a'.repeat(20));
+    req.write(body.slice(0, 32 * 1024));
+    req.end(body.slice(32 * 1024));
   });
   expect(handler).not.toHaveBeenCalled();
 });
