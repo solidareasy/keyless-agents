@@ -25,15 +25,30 @@ function section(text: string, heading: string, indent: number): string {
 }
 
 describe('release workflow contract', () => {
+  it('runs the built process e2e suite after CI checks with the same pinned setup', () => {
+    const ci = readTracked('.github/workflows/ci.yml');
+    const e2e = section(ci, 'e2e', 2);
+    expect(e2e).toContain('needs: checks');
+    for (const command of ['pnpm install --frozen-lockfile', 'pnpm build', 'pnpm test:e2e']) {
+      expect(e2e).toContain(`run: ${command}`);
+    }
+    expect(e2e).toContain("node-version: '22'");
+    expect(e2e).toContain('cache: pnpm');
+    expect(e2e).toContain('persist-credentials: false');
+    const checks = section(ci, 'checks', 2);
+    const actions = [...e2e.matchAll(/^\s*- uses: (.+)$/gm)];
+    expect(actions).toHaveLength(3);
+    for (const [, action] of actions) expect(checks).toContain(`uses: ${action}`);
+  });
+
   it('triggers exclusively on v* tag pushes with concurrency per tag and read-only defaults', () => {
     const cd = readTracked('.github/workflows/cd.yml');
     expect(section(cd, 'on', 0)).toBe("  push:\n    tags: ['v*']");
     expect(section(cd, 'permissions', 0)).toBe('  contents: read');
     expect(section(cd, 'concurrency', 0)).toContain('${{ github.ref }}');
-    expect([...section(cd, 'jobs', 0).matchAll(/^  (\w+):$/gm)].map((match) => match[1])).toEqual([
-      'verify',
-      'publish',
-    ]);
+    expect([...section(cd, 'jobs', 0).matchAll(/^ {2}(\w+):$/gm)].map((match) => match[1])).toEqual(
+      ['verify', 'publish'],
+    );
   });
 
   it('pins every action to the CI SHA and version and disables checkout credentials', () => {

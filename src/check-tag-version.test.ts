@@ -9,9 +9,10 @@ it.each([
   ['v999.999.999', 1],
   [version, 1],
   ['', 1],
+  [undefined, 1],
 ])('validates tag %s against the package version', (tag, status) => {
   const result = spawnSync(process.execPath, ['scripts/check-tag-version.mjs'], {
-    env: { TAG: tag },
+    env: tag === undefined ? {} : { TAG: tag },
     encoding: 'utf8',
   });
   expect(result.status).toBe(status);
