@@ -146,6 +146,7 @@ npm trusted publishing (GitHub OIDC, no npm token) with provenance; lockfile, ex
 - The sandbox proxy reaching the daemon, the name under which the sandbox sees it (`KLAG_URL`), and `set-custom` (experimental) replacing the placeholder in a header or body.
 - Spike M19: issuer reachable by STS, `AssumeRoleWithWebIdentity` pinned to the daemon node, session-policy behavior.
 - The tailscale sidecar logging in through a URL without an auth key, keeping its node in a volume, and the ACL tag requirement.
+- **Tailnet hardening for the daemon node (Tailworm report, 2026-10-25, no Tailscale bulletin yet):** the sidecar node must run with Tailscale SSH disabled (`--ssh=false`), no `tailscale serve`/Funnel, no app-connector entitlement, node-key expiry on, and a dedicated tag whose ACL/grants allow only the OIDC/STS egress and the sandbox→daemon path (per-pair grants, never tag-wide SSH). Lock reviews the sidecar config and the ACL diff before M19 is accepted; the squad's tailnet review (`infra/.superpowers/sdd/lock-tailscale-report.md`) is the input.
 - The daemon's bind and the host-loopback publish through the sidecar's network namespace.
 - Linux support of the sandbox runtime outside Ubuntu (best effort until tested).
 - npm trusted-publishing setup for a new package.
