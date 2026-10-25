@@ -2,7 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
 export function buildCli(): void {
-  execFileSync('mise', ['exec', 'node@22', '--', 'pnpm', 'build'], { stdio: 'pipe' });
+  execFileSync('pnpm', ['build'], { stdio: 'pipe' });
 }
 
 export function cli(
