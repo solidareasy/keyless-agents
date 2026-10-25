@@ -12,12 +12,13 @@ export function cli(
   stdin = '',
   imports: string[] = [],
   testEnv: Record<string, string> = {},
+  entrypoint = resolve('dist/cli/main.js'),
 ) {
   return new Promise<{ code: number | null; stdout: string; stderr: string; errors: string[] }>(
     (resolveResult, reject) => {
       const child = spawn(
         process.execPath,
-        [...imports.flatMap((path) => ['--import', path]), resolve('dist/cli/main.js'), ...args],
+        [...imports.flatMap((path) => ['--import', path]), entrypoint, ...args],
         {
           env: { KLAG_URL: url, KLAG_AUTH: auth, ...testEnv },
           stdio: ['pipe', 'pipe', 'pipe'],

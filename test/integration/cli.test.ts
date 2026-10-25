@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
 import { buildCli, cli } from '../support/cli.js';
 import { daemonFixture, putOptions, type DaemonFixture } from '../support/daemon.js';
@@ -9,6 +12,18 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await f.close();
+});
+
+it('CLI executes through an installed binary symlink', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'klag-bin-'));
+  const binary = join(directory, 'klag');
+  try {
+    symlinkSync(resolve('dist/cli/main.js'), binary);
+    const result = await cli(f.url, f.alpha, ['get', 'A'], '', [], {}, binary);
+    expect(result).toMatchObject({ code: 0, stdout: 'canary-shared', stderr: '' });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 it.each([0, 1, 2, 3, 4, 5, 6])('CLI subprocess proves documented exit code %s', async (exit) => {
