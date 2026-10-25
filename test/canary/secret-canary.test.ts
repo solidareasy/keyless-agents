@@ -41,6 +41,15 @@ process.on('beforeExit', () => {
       throw error;
     }
   });
+  const originalPut = f.store.put.bind(f.store);
+  vi.spyOn(f.store, 'put').mockImplementation(async (...args) => {
+    try {
+      return await originalPut(...args);
+    } catch (error) {
+      captureError(error);
+      throw error;
+    }
+  });
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
     surfaces.push({ label: 'daemon stdout', text: String(chunk) });
     return true;
@@ -86,8 +95,11 @@ process.on('beforeExit', () => {
       f.store.failNext(kind);
       await run(['get', 'SECRET'], 5);
     }
-    expect(surfaces.filter(({ label }) => label === 'String(err)')).toHaveLength(3);
-    expect(f.audit.verify()).toMatchObject({ ok: true, count: 7 });
+    f.store.failNext('UNAVAILABLE');
+    await run(['set', 'SECRET'], 5, CANARY);
+    expect(await f.store.get('/alpha/dev/agent/SECRET')).toEqual({ value: CANARY, version: 1 });
+    expect(surfaces.filter(({ label }) => label === 'String(err)')).toHaveLength(4);
+    expect(f.audit.verify()).toMatchObject({ ok: true, count: 8 });
     for (const text of f.sink.readAll()) surfaces.push({ label: 'audit line', text });
     await f.close();
     await run(['get', 'SECRET'], 5);
