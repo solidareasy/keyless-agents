@@ -1,11 +1,10 @@
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
-import { buildCli, cli } from '../support/cli.js';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { cli } from '../support/cli.js';
 import { daemonFixture, putOptions, type DaemonFixture } from '../support/daemon.js';
 let f: DaemonFixture;
-beforeAll(buildCli, 30000);
 beforeEach(async () => {
   f = await daemonFixture();
   await f.store.put('/alpha/dev/A', 'canary-shared', putOptions);

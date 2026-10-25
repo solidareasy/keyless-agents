@@ -1,9 +1,5 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-
-export function buildCli(): void {
-  execFileSync('pnpm', ['build'], { stdio: 'pipe' });
-}
 
 export function cli(
   url: string,

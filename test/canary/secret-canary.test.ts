@@ -2,13 +2,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { format } from 'node:util';
-import { afterEach, beforeAll, expect, it, vi } from 'vitest';
-import { buildCli, cli } from '../support/cli.js';
+import { afterEach, expect, it, vi } from 'vitest';
+import { cli } from '../support/cli.js';
 import { daemonFixture } from '../support/daemon.js';
 
 const CANARY = 'canary-7f3a9c2e-value-must-never-leak';
 
-beforeAll(buildCli, 30000);
 afterEach(() => vi.restoreAllMocks());
 
 it('M7 permits the value only in successful get stdout across CLI and daemon surfaces', async () => {
