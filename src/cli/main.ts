@@ -57,7 +57,7 @@ export type CliIO = {
   readValue: () => Promise<string>;
   serve: typeof startDaemon;
 };
-const usage = 'Usage: klag list [--prefix P] | get NAME | set NAME | doctor | serve [--json]\n';
+const usage = 'Usage: klag list [--prefix P] | get NAME | set NAME | doctor | serve\n';
 
 export async function main(
   argv: readonly string[] = process.argv.slice(2),

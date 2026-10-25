@@ -35,7 +35,7 @@ it.each([[], ['--help'], ['get', '--help']].map((args) => [args]))(
     const h = harness();
     expect(await main(args, h.io)).toBe(0);
     expect(h.output()).toEqual({
-      stdout: 'Usage: klag list [--prefix P] | get NAME | set NAME | doctor | serve [--json]\n',
+      stdout: 'Usage: klag list [--prefix P] | get NAME | set NAME | doctor | serve\n',
       stderr: '',
     });
     expect(h.io.request).not.toHaveBeenCalled();
