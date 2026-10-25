@@ -170,26 +170,30 @@ it('round-trips stdin through real daemon and CLI processes without leaking the 
     }
     if (daemon === undefined) throw new Error('Daemon did not start');
     const set = await cli(url, token, ['set', 'E2E_ONE'], canary);
-    expect(set).toMatchObject({ code: 0, stdout: '' });
+    expect(set.code).toBe(0);
+    expect(set.stdout === '', 'set stdout is empty').toBe(true);
     const get = await cli(url, token, ['get', 'E2E_ONE']);
-    expect(get).toMatchObject({ code: 0, stdout: canary });
+    expect(get.code).toBe(0);
+    expect(get.stdout === canary, 'get stdout equals the value').toBe(true);
     const list = await cli(url, token, ['list']);
     expect(list.code).toBe(0);
-    expect(list.stdout.split('\n')).toContain('E2E_ONE');
+    expect(list.stdout.split('\n').includes('E2E_ONE'), 'list contains the name').toBe(true);
     const missing = await cli(url, token, ['get', 'E2E_MISSING']);
-    expect(missing).toMatchObject({ code: 2, stdout: '' });
+    expect(missing.code).toBe(2);
+    expect(missing.stdout === '', 'missing get stdout is empty').toBe(true);
     const denied = await cli(url, undefined, ['get', 'E2E_ONE']);
-    expect(denied).toMatchObject({ code: 3, stdout: '' });
+    expect(denied.code).toBe(3);
+    expect(denied.stdout === '', 'denied get stdout is empty').toBe(true);
     await stop(daemon);
-    expect(daemonStdout, 'canary absent from daemon stdout').not.toContain(canary);
-    expect(daemonStderr, 'canary absent from daemon stderr').not.toContain(canary);
+    expect(daemonStdout.includes(canary), 'value absent from daemon stdout').toBe(false);
+    expect(daemonStderr.includes(canary), 'value absent from daemon stderr').toBe(false);
     for (const result of [set, get, list, missing, denied]) {
-      expect(result.stderr, 'canary absent from CLI stderr').not.toContain(canary);
+      expect(result.stderr.includes(canary), 'value absent from CLI stderr').toBe(false);
     }
     const auditLines = readFileSync(auditPath, 'utf8').trim().split('\n');
     expect(auditLines.length).toBeGreaterThanOrEqual(5);
     for (const line of auditLines)
-      expect(line, 'canary absent from each audit line').not.toContain(canary);
+      expect(line.includes(canary), 'value absent from each audit line').toBe(false);
     expect(
       new AuditLog(new FileAuditSink(auditPath)).verify().ok,
       'audit hash chain verifies',
