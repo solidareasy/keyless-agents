@@ -95,7 +95,9 @@ describe('release workflow contract', () => {
     expect(publish).toContain('run: pnpm install --frozen-lockfile');
     expect(publish).toContain('run: pnpm build');
     expect(publish).toContain('run: npm install -g npm@11.5.1');
-    expect(publish).toContain('run: npm publish --provenance --access public --dry-run');
+    expect(publish).toContain(
+      'run: npm publish --provenance --access public --dry-run --ignore-scripts',
+    );
     expect(cd).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN|secrets\.|workflow_dispatch/i);
   });
 });
