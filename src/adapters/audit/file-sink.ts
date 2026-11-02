@@ -1,18 +1,35 @@
-import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+} from 'node:fs';
 import type { AuditSink } from '../../core/audit/log.js';
 
 export class FileAuditSink implements AuditSink {
   constructor(private readonly path: string) {
-    if (existsSync(path)) {
-      if ((statSync(path).mode & 0o177) !== 0) {
+    // One open, then fstat and the read on that same fd: the file that is
+    // checked is the file that was opened, so the path cannot be swapped
+    // between the mode check and the read (TOCTOU).
+    const fd = openSync(path, constants.O_RDWR | constants.O_APPEND | constants.O_CREAT, 0o600);
+    try {
+      const { mode, size } = fstatSync(fd);
+      if ((mode & 0o177) !== 0) {
         throw new Error('Audit file permissions are too permissive');
       }
-      const contents = readFileSync(path, 'utf8');
-      if (contents !== '' && !contents.endsWith('\n')) {
-        throw new Error('Audit file must end with a newline');
+      if (size > 0) {
+        const last = Buffer.alloc(1);
+        readSync(fd, last, 0, 1, size - 1);
+        if (last[0] !== 0x0a) {
+          throw new Error('Audit file must end with a newline');
+        }
       }
+    } finally {
+      closeSync(fd);
     }
-    appendFileSync(path, '', { mode: 0o600, flag: 'a' });
   }
 
   append(line: string): void {
