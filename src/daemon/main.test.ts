@@ -1,4 +1,5 @@
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server } from 'node:http';
@@ -6,9 +7,26 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { startDaemon } from './main.js';
 import { main } from '../cli/main.js';
 
+vi.mock('node:fs', async (original) => {
+  const fs = await original<typeof import('node:fs')>();
+  return { ...fs, closeSync: vi.fn(fs.closeSync), openSync: vi.fn(fs.openSync) };
+});
+
+function auditFds(auditPath: string): number[] {
+  return vi
+    .mocked(openSync)
+    .mock.calls.flatMap(([target], index) =>
+      target === auditPath ? [vi.mocked(openSync).mock.results[index]?.value as number] : [],
+    );
+}
+function closedFds(): number[] {
+  return vi.mocked(closeSync).mock.calls.map(([fd]) => fd);
+}
+
 const roots: string[] = [];
 const servers: Server[] = [];
 afterEach(async () => {
+  vi.clearAllMocks();
   vi.unstubAllEnvs();
   await Promise.all(
     servers.map(
@@ -52,6 +70,46 @@ it('starts the memory-only daemon with persistent audit and derived registry', a
   servers.push(started.server);
   expect(started.server.listening).toBe(true);
   expect(readFileSync(join(root, 'audit.jsonl'), 'utf8')).toBe('');
+});
+
+it('keeps the audit fd open while serving and closes it when the server closes', async () => {
+  const { path, config } = fixture();
+  const started = await startDaemon(path);
+  if (!started.ok) throw new Error('Daemon fixture unavailable');
+  const fds = auditFds(config.audit.path);
+  expect(fds).toHaveLength(1);
+  expect(closedFds()).not.toContain(fds[0]);
+  await new Promise<void>((resolve) => {
+    started.server.closeAllConnections();
+    started.server.close(() => resolve());
+  });
+  expect(closedFds().filter((fd) => fd === fds[0])).toHaveLength(1);
+});
+
+it('closes the audit fd when the audit chain fails to verify at startup', async () => {
+  const { path, config } = fixture();
+  writeFileSync(config.audit.path, '{}\n', { mode: 0o600 });
+  expect(await startDaemon(path)).toEqual({ ok: false, message: 'Daemon startup failed.' });
+  const fds = auditFds(config.audit.path);
+  expect(fds).toHaveLength(1);
+  expect(closedFds().filter((fd) => fd === fds[0])).toHaveLength(1);
+});
+
+it('closes the audit fd when listen fails after the sink was built', async () => {
+  const { path, config, root } = fixture();
+  const blocker = createServer();
+  await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = blocker.address();
+    if (address === null || typeof address === 'string') throw new Error('Blocker unavailable');
+    writeFileSync(path, JSON.stringify({ ...config, listen: `127.0.0.1:${address.port}` }));
+    expect(await startDaemon(path)).toEqual({ ok: false, message: 'Daemon startup failed.' });
+    const fds = auditFds(join(root, 'audit.jsonl'));
+    expect(fds).toHaveLength(1);
+    expect(closedFds().filter((fd) => fd === fds[0])).toHaveLength(1);
+  } finally {
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
+  }
 });
 
 it('refuses startup without explicit memory mode before opening state files', async () => {

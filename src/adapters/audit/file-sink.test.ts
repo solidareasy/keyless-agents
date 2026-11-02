@@ -8,6 +8,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -146,9 +147,12 @@ it('checks mode and trailing newline through the one fd it opened, never by path
   }
 });
 
-it('closes its fd after a successful construction', () => {
+it('keeps the validated fd open after construction and closes it exactly once on close()', () => {
   const path = temporaryPath();
-  new FileAuditSink(path);
+  const sink = new FileAuditSink(path);
+  expect(closeSync).not.toHaveBeenCalled();
+  sink.close();
+  sink.close();
   expect(closeSync).toHaveBeenCalledTimes(1);
   expect(closeSync).toHaveBeenCalledWith(openedFd(path));
 });
@@ -181,4 +185,105 @@ it('judges the inode it opened even if the path becomes a permissive symlink mid
   expect(() => new FileAuditSink(path)).not.toThrow();
   expect(fstatSync).toHaveBeenCalledTimes(1);
   expect(readFileSync(decoy, 'utf8')).toBe('canary-decoy');
+});
+
+it('opens the path once for the whole constructor, append and readAll cycle', () => {
+  const path = temporaryPath();
+  const sink = new FileAuditSink(path);
+  sink.append('canary-one');
+  sink.readAll();
+  sink.append('canary-two');
+  sink.readAll();
+  expect(vi.mocked(openSync).mock.calls.filter(([target]) => target === path)).toHaveLength(1);
+  for (const spy of [statSync, existsSync, readFileSync]) {
+    expect(vi.mocked(spy).mock.calls.filter(([target]) => target === path)).toEqual([]);
+  }
+  sink.close();
+});
+
+it('reads back what it appended from byte 0 even though O_APPEND leaves the offset at EOF', () => {
+  const path = temporaryPath();
+  writeFileSync(path, 'canary-existing\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  expect(sink.readAll()).toEqual(['canary-existing', '']);
+  sink.append('canary-one');
+  expect(sink.readAll()).toEqual(['canary-existing', 'canary-one', '']);
+  sink.append('canary-two');
+  expect(sink.readAll()).toEqual(['canary-existing', 'canary-one', 'canary-two', '']);
+  sink.close();
+});
+
+it('keeps appending to and reading the original inode after the path is renamed and replaced', () => {
+  const path = temporaryPath();
+  const moved = `${path}.moved`;
+  writeFileSync(path, 'canary-original\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  renameSync(path, moved);
+  writeFileSync(path, 'canary-other\n', { mode: 0o600 });
+  sink.append('canary-one');
+  expect(readFileSync(moved, 'utf8')).toBe('canary-original\ncanary-one\n');
+  expect(sink.readAll()).toEqual(['canary-original', 'canary-one', '']);
+  expect(readFileSync(path, 'utf8')).toBe('canary-other\n');
+  sink.close();
+});
+
+it('keeps appending to and reading the original inode after the path becomes a symlink', () => {
+  const path = temporaryPath();
+  const moved = `${path}.moved`;
+  const decoy = `${path}.decoy`;
+  writeFileSync(decoy, 'canary-decoy\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  sink.append('canary-one');
+  renameSync(path, moved);
+  symlinkSync(decoy, path);
+  sink.append('canary-two');
+  expect(readFileSync(moved, 'utf8')).toBe('canary-one\ncanary-two\n');
+  expect(sink.readAll()).toEqual(['canary-one', 'canary-two', '']);
+  expect(readFileSync(decoy, 'utf8')).toBe('canary-decoy\n');
+  sink.close();
+});
+
+it('reads positionally from byte 0 across short reads', () => {
+  const path = temporaryPath();
+  writeFileSync(path, 'canary-abc\ncanary-def\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  vi.clearAllMocks();
+  const realRead = vi.mocked(readSync).getMockImplementation() as typeof readSync;
+  vi.mocked(readSync).mockImplementation(((
+    fd: number,
+    buffer: NodeJS.ArrayBufferView,
+    offset: number,
+    length: number,
+    position: number,
+  ) => realRead(fd, buffer, offset, Math.min(length, 4), position)) as typeof readSync);
+  try {
+    expect(sink.readAll()).toEqual(['canary-abc', 'canary-def', '']);
+    const positions = vi.mocked(readSync).mock.calls.map((call) => (call as unknown[])[4]);
+    expect(positions[0]).toBe(0);
+    expect(positions.length).toBeGreaterThan(1);
+  } finally {
+    vi.mocked(readSync).mockImplementation(realRead);
+    sink.close();
+  }
+});
+
+it('stops reading when the file shrinks underneath it instead of looping', () => {
+  const path = temporaryPath();
+  writeFileSync(path, 'canary-abc\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  vi.mocked(readSync).mockImplementationOnce(() => 0);
+  expect(sink.readAll()).toEqual(['']);
+  sink.close();
+});
+
+it('close() is idempotent and append/readAll throw a fixed error afterwards', () => {
+  const path = temporaryPath();
+  const sink = new FileAuditSink(path);
+  sink.append('canary-one');
+  sink.close();
+  expect(() => sink.close()).not.toThrow();
+  expect(() => sink.append('canary-two')).toThrow(new Error('Audit sink is closed'));
+  expect(() => sink.readAll()).toThrow(new Error('Audit sink is closed'));
+  expect(readFileSync(path, 'utf8')).toBe('canary-one\n');
+  expect(closeSync).toHaveBeenCalledTimes(1);
 });

@@ -15,6 +15,7 @@ import { serve } from './server.js';
 export type StartResult = { ok: true; server: Server } | { ok: false; message: string };
 
 export async function startDaemon(path: string = configPath()): Promise<StartResult> {
+  let sink: FileAuditSink | undefined;
   try {
     const decoded = decodeJson(readFileSync(path, 'utf8'));
     if (!decoded.ok) return { ok: false, message: 'Invalid configuration JSON.' };
@@ -22,7 +23,9 @@ export async function startDaemon(path: string = configPath()): Promise<StartRes
     if (!loaded.ok) return { ok: false, message: loaded.code };
     const config = loaded.config;
     if (config.store !== 'memory') return { ok: false, message: 'AWS adapter not available yet' };
-    const audit = new AuditLog(new FileAuditSink(config.audit.path));
+    // The sink holds its validated fd for as long as the daemon serves.
+    sink = new FileAuditSink(config.audit.path);
+    const audit = new AuditLog(sink);
     if (!audit.verify().ok) throw new AuditChainBroken();
     const registry = new Registry(
       new FileRegistryStore(join(dirname(config.audit.path), 'registry.json')),
@@ -46,6 +49,9 @@ export async function startDaemon(path: string = configPath()): Promise<StartRes
         return project.kmsKeyAlias;
       },
     });
+    // Also covers the AuditChainBroken path, where server.ts closes the server.
+    const held = sink;
+    server.once('close', () => held.close());
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.once('listening', () => {
@@ -55,6 +61,7 @@ export async function startDaemon(path: string = configPath()): Promise<StartRes
     });
     return { ok: true, server };
   } catch {
+    sink?.close();
     return { ok: false, message: 'Daemon startup failed.' };
   }
 }
