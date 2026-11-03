@@ -43,10 +43,12 @@ export class FileAuditSink implements AuditSink {
     let filled = 0;
     while (filled < buffer.length) {
       const read = readSync(fd, buffer, filled, buffer.length - filled, filled);
-      if (read === 0) break;
+      // A short read here means the file shrank after fstat. Returning the
+      // prefix would let verifyChain accept an empty or truncated chain.
+      if (read === 0) throw new Error('Audit file shrank while reading');
       filled += read;
     }
-    return buffer.toString('utf8', 0, filled).split('\n');
+    return buffer.toString('utf8').split('\n');
   }
 
   close(): void {

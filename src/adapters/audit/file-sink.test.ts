@@ -267,13 +267,39 @@ it('reads positionally from byte 0 across short reads', () => {
   }
 });
 
-it('stops reading when the file shrinks underneath it instead of looping', () => {
+it('fails closed when the file shrinks to nothing before the first read instead of looping', () => {
   const path = temporaryPath();
   writeFileSync(path, 'canary-abc\n', { mode: 0o600 });
   const sink = new FileAuditSink(path);
+  vi.clearAllMocks();
   vi.mocked(readSync).mockImplementationOnce(() => 0);
-  expect(sink.readAll()).toEqual(['']);
+  expect(() => sink.readAll()).toThrow(new Error('Audit file shrank while reading'));
+  expect(vi.mocked(readSync)).toHaveBeenCalledTimes(1);
   sink.close();
+});
+
+it('fails closed when the file is cut in the middle of a readAll', () => {
+  const path = temporaryPath();
+  writeFileSync(path, 'canary-abc\ncanary-def\n', { mode: 0o600 });
+  const sink = new FileAuditSink(path);
+  vi.clearAllMocks();
+  const realRead = vi.mocked(readSync).getMockImplementation() as typeof readSync;
+  vi.mocked(readSync)
+    .mockImplementationOnce(((
+      fd: number,
+      buffer: NodeJS.ArrayBufferView,
+      offset: number,
+      length: number,
+      position: number,
+    ) => realRead(fd, buffer, offset, Math.min(length, 11), position)) as typeof readSync)
+    .mockImplementationOnce(() => 0);
+  try {
+    expect(() => sink.readAll()).toThrow(new Error('Audit file shrank while reading'));
+    expect(vi.mocked(readSync)).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.mocked(readSync).mockImplementation(realRead);
+    sink.close();
+  }
 });
 
 it('close() is idempotent and append/readAll throw a fixed error afterwards', () => {

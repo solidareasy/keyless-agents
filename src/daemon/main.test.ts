@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, expect, it, vi } from 'vitest';
+import { FileAuditSink } from '../adapters/audit/file-sink.js';
 import { startDaemon } from './main.js';
 import { main } from '../cli/main.js';
 
@@ -90,6 +91,21 @@ it('closes the audit fd when the audit chain fails to verify at startup', async 
   const { path, config } = fixture();
   writeFileSync(config.audit.path, '{}\n', { mode: 0o600 });
   expect(await startDaemon(path)).toEqual({ ok: false, message: 'Daemon startup failed.' });
+  const fds = auditFds(config.audit.path);
+  expect(fds).toHaveLength(1);
+  expect(closedFds().filter((fd) => fd === fds[0])).toHaveLength(1);
+});
+
+it('fails closed and closes the audit fd once when readAll throws at startup', async () => {
+  const { path, config } = fixture();
+  const readAll = vi.spyOn(FileAuditSink.prototype, 'readAll').mockImplementation(() => {
+    throw new Error('Audit file shrank while reading');
+  });
+  try {
+    expect(await startDaemon(path)).toEqual({ ok: false, message: 'Daemon startup failed.' });
+  } finally {
+    readAll.mockRestore();
+  }
   const fds = auditFds(config.audit.path);
   expect(fds).toHaveLength(1);
   expect(closedFds().filter((fd) => fd === fds[0])).toHaveLength(1);
