@@ -80,6 +80,30 @@ describe('secret scanning contract', () => {
     expect(job.indexOf('tar -xzf')).toBeGreaterThan(verify);
   });
 
+  it('keeps runner context out of job env and supplies the scanner path to both steps', () => {
+    // This is a local regression guard, not an Actions expression validator.
+    const job = jobBlock('secrets');
+    const jobConfig = job.split(/^ {4}steps:/m)[0];
+    expect(jobConfig).not.toMatch(/\$\{\{[^}]*\brunner\b/);
+    expect(job).toMatch(/^ {10}"\$RUNNER_TEMP\/gitleaks" version$/m);
+    const scannerSteps = job
+      .split(/^ {6}- /m)
+      .filter((step) => /^ {8}run: bash scripts\/secret-scan\.sh(?: self-test)?$/m.test(step));
+    expect(scannerSteps).toHaveLength(2);
+    for (const step of scannerSteps) {
+      expect(step).toMatch(/^ {8}env:\n {10}GITLEAKS_BIN: \$\{\{ runner\.temp \}\}\/gitleaks$/m);
+    }
+    const scanStep = scannerSteps.find((step) =>
+      /^ {8}run: bash scripts\/secret-scan\.sh$/m.test(step),
+    );
+    expect(scanStep).toMatch(
+      /^ {10}SCAN_BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}$/m,
+    );
+    expect(scanStep).toMatch(
+      /^ {10}SCAN_HEAD: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}$/m,
+    );
+  });
+
   it('scans the whole change range, not only HEAD, and fails the job on a finding', () => {
     const job = jobBlock('secrets');
     expect(job).toContain('scripts/secret-scan.sh');
