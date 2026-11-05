@@ -4,3 +4,9 @@
 # demonstration token `canary-local-auth` (README "Try it locally"), a fixture and
 # not a credential. Reviewed by Dozer on 2026-11-05 for [EXT-872]; no secret exposed.
 2d68a4cf98e872cc5c13c9b5cab123f19cdbfacf:README.md:generic-api-key:62
+#
+# The merge resolution in 85bd9734 repeats the same public demonstration hash.
+# Compared directly with 2d68a4cf and SHA-256(canary-local-auth); both match.
+# Oracle authorized this second exact identity for [EXT-872] on 2026-11-05.
+# This is not a credential; independent security review remains required.
+85bd973451be550d3a094f57a1d037b7061b0a2b:README.md:generic-api-key:62

@@ -132,13 +132,14 @@ describe('secret scanning contract', () => {
     expect(script).toMatch(/grep -Eq '\^RuleID: \+github-pat\$'/);
   });
 
-  it('keeps the scanner default rules without any broad allowlist', () => {
+  it('keeps default rules with only the two triaged public-demo fingerprints', () => {
     expect(trackedFiles.filter((path) => /(^|\/)\.?gitleaks[^/]*\.toml$/.test(path))).toEqual([]);
     const entries = readTracked('.gitleaksignore')
       .split('\n')
       .filter((line) => line.trim() !== '' && !line.startsWith('#'));
     expect(entries).toEqual([
       '2d68a4cf98e872cc5c13c9b5cab123f19cdbfacf:README.md:generic-api-key:62',
+      '85bd973451be550d3a094f57a1d037b7061b0a2b:README.md:generic-api-key:62',
     ]);
     expect(scan()).not.toMatch(/--config|--gitleaks-ignore-path|--baseline-path/);
   });
