@@ -74,6 +74,10 @@ jobs:
         env:
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks
         run: bash scripts/secret-scan.sh self-test
+      - name: Scanner detects a secret introduced only by a merge
+        env:
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks
+        run: bash scripts/secret-scan-merge-test.sh
       - name: Scan every commit of the change
         env:
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks

@@ -23,7 +23,7 @@ case "${1:-scan}" in
       range="${head}"
     fi
     echo "secret-scan: scanning ${range}"
-    "$gitleaks" git --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="$range" .
+    "$gitleaks" git --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="--diff-merges=first-parent $range" .
     ;;
   self-test)
     work="$(mktemp -d)"

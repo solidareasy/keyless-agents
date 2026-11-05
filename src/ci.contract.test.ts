@@ -88,8 +88,10 @@ describe('secret scanning contract', () => {
     expect(job).toMatch(/^ {10}"\$RUNNER_TEMP\/gitleaks" version$/m);
     const scannerSteps = job
       .split(/^ {6}- /m)
-      .filter((step) => /^ {8}run: bash scripts\/secret-scan\.sh(?: self-test)?$/m.test(step));
-    expect(scannerSteps).toHaveLength(2);
+      .filter((step) =>
+        /^ {8}run: bash scripts\/secret-scan(?:-merge-test)?\.sh(?: self-test)?$/m.test(step),
+      );
+    expect(scannerSteps).toHaveLength(3);
     for (const step of scannerSteps) {
       expect(step).toMatch(/^ {8}env:\n {10}GITLEAKS_BIN: \$\{\{ runner\.temp \}\}\/gitleaks$/m);
     }
@@ -115,6 +117,11 @@ describe('secret scanning contract', () => {
     expect(script).toMatch(/gitleaks.*\bgit\b.*--exit-code 1.*--log-opts/s);
     expect(script).toMatch(/range="\$\{base\}\.\.\$\{head\}"/);
     expect(script).not.toMatch(/--no-git|--exit-code 0|\|\|\s*(true|:)/);
+  });
+
+  it('keeps merge patches enabled and the behavioral regression fixture tracked', () => {
+    expect(scan()).toContain('--log-opts="--diff-merges=first-parent $range"');
+    expect(trackedFiles).toContain('scripts/secret-scan-merge-test.sh');
   });
 
   it('proves on every run that the scanner fails on a synthetic secret', () => {
