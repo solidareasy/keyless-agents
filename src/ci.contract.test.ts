@@ -48,3 +48,67 @@ describe('supply chain contract', () => {
     ).toEqual([]);
   });
 });
+
+describe('secret scanning contract', () => {
+  const ci = (): string => readTracked('.github/workflows/ci.yml');
+  const scan = (): string => readTracked('scripts/secret-scan.sh');
+  const jobBlock = (name: string): string => {
+    const match = new RegExp(`^  ${name}:\\n((?:(?:    .*)?\\n)+)`, 'm').exec(ci());
+    expect(match, `job ${name} must exist in ci.yml`).not.toBeNull();
+    return match?.[1] ?? '';
+  };
+
+  it('runs a read-only secrets job with full history and no persisted credentials', () => {
+    const job = jobBlock('secrets');
+    expect(job).toMatch(/^ {4}permissions:\n {6}contents: read$/m);
+    expect(job).toMatch(/uses: actions\/checkout@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+\n\s+with:\n/);
+    expect(job).toMatch(/^\s+fetch-depth: 0$/m);
+    expect(job).toMatch(/^\s+persist-credentials: false$/m);
+    expect(job).not.toMatch(/continue-on-error/);
+    expect(job).not.toMatch(/\|\|\s*(true|:)/);
+  });
+
+  it('installs a pinned gitleaks release only after verifying its SHA-256', () => {
+    const job = jobBlock('secrets');
+    expect(job).toMatch(/^\s+GITLEAKS_VERSION: \d+\.\d+\.\d+$/m);
+    expect(job).toMatch(/^\s+GITLEAKS_SHA256: [0-9a-f]{64}$/m);
+    expect(job).toMatch(
+      /releases\/download\/v\$\{GITLEAKS_VERSION\}\/gitleaks_\$\{GITLEAKS_VERSION\}_linux_x64\.tar\.gz/,
+    );
+    const verify = job.indexOf('sha256sum --check --strict');
+    expect(verify).toBeGreaterThan(-1);
+    expect(job.indexOf('tar -xzf')).toBeGreaterThan(verify);
+  });
+
+  it('scans the whole change range, not only HEAD, and fails the job on a finding', () => {
+    const job = jobBlock('secrets');
+    expect(job).toContain('scripts/secret-scan.sh');
+    expect(job).toContain('github.event.pull_request.base.sha');
+    expect(job).toContain('github.event.pull_request.head.sha');
+    expect(job).toContain('github.event.before');
+    const script = scan();
+    expect(script).toMatch(/^set -euo pipefail$/m);
+    expect(script).toMatch(/gitleaks.*\bgit\b.*--exit-code 1.*--log-opts/s);
+    expect(script).toMatch(/range="\$\{base\}\.\.\$\{head\}"/);
+    expect(script).not.toMatch(/--no-git|--exit-code 0|\|\|\s*(true|:)/);
+  });
+
+  it('proves on every run that the scanner fails on a synthetic secret', () => {
+    expect(jobBlock('secrets')).toMatch(/scripts\/secret-scan\.sh self-test/);
+    const script = scan();
+    expect(script).toMatch(/self-test\)/);
+    expect(script).toMatch(/rc" -eq 1/);
+    expect(script).toMatch(/grep -Eq '\^RuleID: \+github-pat\$'/);
+  });
+
+  it('keeps the scanner default rules without any broad allowlist', () => {
+    expect(trackedFiles.filter((path) => /(^|\/)\.?gitleaks[^/]*\.toml$/.test(path))).toEqual([]);
+    const entries = readTracked('.gitleaksignore')
+      .split('\n')
+      .filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    expect(entries).toEqual([
+      '2d68a4cf98e872cc5c13c9b5cab123f19cdbfacf:README.md:generic-api-key:62',
+    ]);
+    expect(scan()).not.toMatch(/--config|--gitleaks-ignore-path|--baseline-path/);
+  });
+});

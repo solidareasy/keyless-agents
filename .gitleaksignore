@@ -1,0 +1,6 @@
+# Exact-fingerprint triage only (commit:file:rule:line). No path or rule allowlists.
+#
+# README.md:62 in 2d68a4cf: "tokenHash" is the SHA-256 of the publicly documented
+# demonstration token `canary-local-auth` (README "Try it locally"), a fixture and
+# not a credential. Reviewed by Dozer on 2026-11-05 for [EXT-872]; no secret exposed.
+2d68a4cf98e872cc5c13c9b5cab123f19cdbfacf:README.md:generic-api-key:62
