@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.superpowers/
+*.tgz
+.env*
+.DS_Store
