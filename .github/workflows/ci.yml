@@ -78,6 +78,10 @@ jobs:
         env:
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks
         run: bash scripts/secret-scan-merge-test.sh
+      - name: Scanner rejects inline and checkout-config suppressions
+        env:
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks
+        run: bash scripts/secret-scan-suppression-test.sh
       - name: Scan every commit of the change
         env:
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks

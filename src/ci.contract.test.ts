@@ -89,9 +89,11 @@ describe('secret scanning contract', () => {
     const scannerSteps = job
       .split(/^ {6}- /m)
       .filter((step) =>
-        /^ {8}run: bash scripts\/secret-scan(?:-merge-test)?\.sh(?: self-test)?$/m.test(step),
+        /^ {8}run: bash scripts\/secret-scan(?:-merge-test|-suppression-test)?\.sh(?: self-test)?$/m.test(
+          step,
+        ),
       );
-    expect(scannerSteps).toHaveLength(3);
+    expect(scannerSteps).toHaveLength(4);
     for (const step of scannerSteps) {
       expect(step).toMatch(/^ {8}env:\n {10}GITLEAKS_BIN: \$\{\{ runner\.temp \}\}\/gitleaks$/m);
     }
@@ -132,6 +134,25 @@ describe('secret scanning contract', () => {
     expect(script).toMatch(/grep -Eq '\^RuleID: \+github-pat\$'/);
   });
 
+  it('ignores inline allow comments and checkout config in scan and self-test', () => {
+    const script = scan();
+    const invocations = script
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#') && line.includes('"$gitleaks" git '));
+    expect(invocations).toHaveLength(2);
+    for (const invocation of invocations) {
+      expect(invocation).toMatch(/ --ignore-gitleaks-allow(?: |$)/);
+      expect(invocation).toContain(' --config "$config" ');
+    }
+    expect(script).toMatch(/^work="\$\(mktemp -d\)"$/m);
+    expect(script).toMatch(/^config="\$work\/gitleaks\.toml"$/m);
+    expect(script).toContain('printf \'[extend]\\nuseDefault = true\\n\' >"$config"');
+    expect(trackedFiles).toContain('scripts/secret-scan-suppression-test.sh');
+    expect(jobBlock('secrets')).toMatch(
+      /^ {8}run: bash scripts\/secret-scan-suppression-test\.sh$/m,
+    );
+  });
+
   it('keeps default rules with only the two triaged public-demo fingerprints', () => {
     expect(trackedFiles.filter((path) => /(^|\/)\.?gitleaks[^/]*\.toml$/.test(path))).toEqual([]);
     const entries = readTracked('.gitleaksignore')
@@ -141,6 +162,6 @@ describe('secret scanning contract', () => {
       '2d68a4cf98e872cc5c13c9b5cab123f19cdbfacf:README.md:generic-api-key:62',
       '85bd973451be550d3a094f57a1d037b7061b0a2b:README.md:generic-api-key:62',
     ]);
-    expect(scan()).not.toMatch(/--config|--gitleaks-ignore-path|--baseline-path/);
+    expect(scan()).not.toMatch(/--gitleaks-ignore-path|--baseline-path/);
   });
 });

@@ -4,12 +4,17 @@
 #   secret-scan.sh              scan the commits of the change (SCAN_BASE..SCAN_HEAD)
 #   secret-scan.sh self-test    prove the scanner fails on a synthetic secret
 #
-# Uses the default gitleaks rules. The only suppression is the exact-fingerprint
-# `.gitleaksignore`; findings are printed redacted, so no secret reaches the log.
+# Uses default gitleaks rules from a generated temporary config, not the checkout.
+# Inline gitleaks:allow comments are disabled; the only repository-controlled
+# suppression is the exact-fingerprint `.gitleaksignore`. Findings are redacted.
 set -euo pipefail
 
 gitleaks="${GITLEAKS_BIN:-gitleaks}"
 zero=0000000000000000000000000000000000000000
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+config="$work/gitleaks.toml"
+printf '[extend]\nuseDefault = true\n' >"$config"
 
 case "${1:-scan}" in
   scan)
@@ -23,18 +28,19 @@ case "${1:-scan}" in
       range="${head}"
     fi
     echo "secret-scan: scanning ${range}"
-    "$gitleaks" git --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="--diff-merges=first-parent $range" .
+    "$gitleaks" git --ignore-gitleaks-allow --config "$config" --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="--diff-merges=first-parent $range" .
     ;;
   self-test)
-    work="$(mktemp -d)"
-    git -C "$work" init --quiet
+    repo="$work/repo"
+    mkdir -- "$repo"
+    git -C "$repo" init --quiet
     # Assembled at run time so this file never contains a scannable token.
-    printf 'token = "%s%s"\n' 'ghp_' 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bD1fH3jK5' >"$work/synthetic.txt"
-    git -C "$work" add synthetic.txt
-    git -C "$work" -c user.name=selftest -c user.email=selftest@example.invalid \
+    printf 'token = "%s%s" # gitleaks:allow\n' 'ghp_' 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bD1fH3jK5' >"$repo/synthetic.txt"
+    git -C "$repo" add synthetic.txt
+    git -C "$repo" -c user.name=selftest -c user.email=selftest@example.invalid \
       commit --quiet --message synthetic
     rc=0
-    out="$("$gitleaks" git --no-banner --no-color --redact --verbose --exit-code 1 --log-opts=HEAD "$work" 2>&1)" || rc=$?
+    out="$("$gitleaks" git --ignore-gitleaks-allow --config "$config" --no-banner --no-color --redact --verbose --exit-code 1 --log-opts=HEAD "$repo" 2>&1)" || rc=$?
     printf '%s\n' "$out"
     if [[ "$rc" -eq 1 ]] && grep -Eq '^RuleID: +github-pat$' <<<"$out"; then
       echo "secret-scan self-test: scanner failed on the synthetic secret as required"
