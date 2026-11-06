@@ -121,8 +121,8 @@ describe('secret scanning contract', () => {
     expect(script).not.toMatch(/--no-git|--exit-code 0|\|\|\s*(true|:)/);
   });
 
-  it('keeps merge patches enabled and the behavioral regression fixture tracked', () => {
-    expect(scan()).toContain('--log-opts="--diff-merges=first-parent $range"');
+  it('keeps merge and text patches enabled and the behavioral regression fixture tracked', () => {
+    expect(scan()).toContain('--log-opts="--diff-merges=first-parent --text $range"');
     expect(trackedFiles).toContain('scripts/secret-scan-merge-test.sh');
   });
 

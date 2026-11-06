@@ -28,7 +28,7 @@ case "${1:-scan}" in
       range="${head}"
     fi
     echo "secret-scan: scanning ${range}"
-    "$gitleaks" git --ignore-gitleaks-allow --config "$config" --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="--diff-merges=first-parent $range" .
+    "$gitleaks" git --ignore-gitleaks-allow --config "$config" --no-banner --no-color --redact --verbose --exit-code 1 --log-opts="--diff-merges=first-parent --text $range" .
     ;;
   self-test)
     repo="$work/repo"
