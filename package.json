@@ -37,5 +37,12 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
     "vitest": "5.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "eslint@10.13.0>minimatch": "11.0.5",
+      "@eslint/config-array@0.23.5>minimatch": "11.0.5",
+      "@typescript-eslint/typescript-estree@8.72.0>minimatch": "11.0.5"
+    }
   }
 }
